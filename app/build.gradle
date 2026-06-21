@@ -1,0 +1,66 @@
+// app/build.gradle — Module-level Gradle build script
+// Configures the Android app module: SDK versions, build types, and dependencies.
+
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    // Package namespace — matches the directory structure under java/
+    namespace 'com.mark.phonenotify'
+
+    // Use the latest stable compile SDK
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mark.phonenotify"
+
+        // Minimum SDK 26 (Android 8.0 Oreo) as required
+        minSdk 26
+        targetSdk 34
+
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // Java 8 required for OkHttp and coroutines
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    // Enable View Binding for type-safe view access in MainActivity
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    // AndroidX Core & UI
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // OkHttp — WebSocket client for sending notifications to the laptop
+    // Docs: https://square.github.io/okhttp/
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Kotlin Coroutines — for async operations without blocking the main thread
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // Lifecycle — for LifecycleOwner-aware coroutine scopes
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+}

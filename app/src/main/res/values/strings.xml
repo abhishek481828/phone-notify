@@ -1,0 +1,17 @@
+<resources>
+    <!-- App name shown in launcher and task switcher -->
+    <string name="app_name">Phone Notify</string>
+
+    <!-- Label shown in the system Notification Access settings list -->
+    <string name="notification_service_label">Phone Notify Listener</string>
+
+    <!-- Connect button states -->
+    <string name="btn_connect">Connect</string>
+    <string name="btn_connecting">Connecting…</string>
+    <string name="btn_disconnect">Disconnect</string>
+    <string name="btn_retry">Retry</string>
+
+    <!-- Input hints -->
+    <string name="hint_ip">192.168.1.100</string>
+    <string name="hint_port">8080</string>
+</resources>

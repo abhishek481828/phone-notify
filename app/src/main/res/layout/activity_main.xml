@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    activity_main.xml — Phone Notify Main Screen (v2)
+    ─────────────────────────────────────────────────────
+    New in v2:
+      • tvUrlPreview    — live WebSocket URL preview below the port field
+      • tvQueueSize     — offline queue badge (hidden when empty)
+      • tvNotifSentCount — notifications delivered to server (vs. captured)
+      • tvNotifCount     — total captured (may include queued)
+
+    View ID reference for View Binding (ActivityMainBinding):
+      cardPermission      — amber permission banner
+      btnGrantPermission  — opens Notification Access settings
+      cardMain            — main content card (dimmed when no permission)
+      etIpAddress         — laptop IP address input
+      etPort              — server port input
+      tvUrlPreview        — live ws:// URL preview
+      btnConnect          — Connect / Connecting… / Disconnect / Retry
+      viewStatusDot       — colored dot (background drawable changes per state)
+      tvStatus            — status text label
+      tvQueueSize         — offline queue badge
+      tvNotifCount        — total notifications captured
+      tvNotifSentCount    — total notifications sent to server
+-->
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_base"
+    android:fillViewport="true"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- ── App title row ──────────────────────────────────────────────── -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingTop="12dp"
+            android:paddingBottom="24dp">
+
+            <View
+                android:id="@+id/viewLiveDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/dot_connected"
+                android:layout_marginEnd="10dp"/>
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/app_name"
+                android:textColor="@color/text_primary"
+                android:textSize="22sp"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"/>
+
+            <!-- Version badge -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="v2.0"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp"
+                android:fontFamily="sans-serif"/>
+
+        </LinearLayout>
+
+        <!-- ── Permission warning card ──────────────────────────────────── -->
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardPermission"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/warning_bg"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔔  Permission Required"
+                    android:textColor="@color/warning_text"
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:layout_marginBottom="6dp"/>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Phone Notify needs Notification Access to capture and forward notifications to your laptop."
+                    android:textColor="@color/warning_subtext"
+                    android:textSize="12.5sp"
+                    android:lineSpacingMultiplier="1.4"
+                    android:layout_marginBottom="14dp"/>
+
+                <Button
+                    android:id="@+id/btnGrantPermission"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:text="Grant Notification Access"
+                    android:textSize="13sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/bg_base"
+                    android:backgroundTint="@color/warning_btn"
+                    app:cornerRadius="10dp"/>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── Main content card ─────────────────────────────────────────── -->
+
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardMain"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardBackgroundColor="@color/bg_card"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <!-- Section label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="RELAY SERVER"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:layout_marginBottom="14dp"/>
+
+                <!-- IP Address label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Laptop IP Address"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp"/>
+
+                <!-- IP Address input -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="14dp"
+                    app:boxBackgroundColor="@color/bg_input"
+                    app:boxBackgroundMode="filled"
+                    app:boxCornerRadiusTopStart="10dp"
+                    app:boxCornerRadiusTopEnd="10dp"
+                    app:boxCornerRadiusBottomStart="10dp"
+                    app:boxCornerRadiusBottomEnd="10dp"
+                    app:hintEnabled="false"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etIpAddress"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:hint="192.168.1.50 or wss://..."
+                        android:inputType="textUri"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_muted"
+                        android:textSize="16sp"
+                        android:fontFamily="monospace"
+                        android:paddingStart="14dp"
+                        android:imeOptions="actionNext"
+                        android:singleLine="true"/>
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Port label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Port"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp"/>
+
+                <!-- Port input -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    app:boxBackgroundColor="@color/bg_input"
+                    app:boxBackgroundMode="filled"
+                    app:boxCornerRadiusTopStart="10dp"
+                    app:boxCornerRadiusTopEnd="10dp"
+                    app:boxCornerRadiusBottomStart="10dp"
+                    app:boxCornerRadiusBottomEnd="10dp"
+                    app:hintEnabled="false"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etPort"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:hint="8080"
+                        android:inputType="number"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_muted"
+                        android:textSize="16sp"
+                        android:fontFamily="monospace"
+                        android:paddingStart="14dp"
+                        android:imeOptions="actionDone"
+                        android:singleLine="true"/>
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!--
+                    URL preview — updates live as the user types via TextWatcher.
+                    Shows the exact URL that will be sent to WebSocketManager,
+                    including the ?type=phone query parameter.
+                -->
+                <TextView
+                    android:id="@+id/tvUrlPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="ws://…/?type=phone"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:fontFamily="monospace"
+                    android:paddingStart="4dp"
+                    android:layout_marginBottom="20dp"
+                    tools:text="ws://192.168.1.50:8080/?type=phone"/>
+
+                <!-- Connect / Disconnect button -->
+                <Button
+                    android:id="@+id/btnConnect"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:text="@string/btn_connect"
+                    android:textSize="15sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/bg_base"
+                    android:backgroundTint="@color/btn_connect"
+                    android:layout_marginBottom="8dp"
+                    app:cornerRadius="12dp"/>
+
+                <!-- Offline queue badge — hidden when queue is empty -->
+                <TextView
+                    android:id="@+id/tvQueueSize"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    android:gravity="center"
+                    android:textColor="@color/status_connecting"
+                    android:textSize="11.5sp"
+                    android:paddingBottom="10dp"
+                    tools:text="📦 12 notification(s) queued"
+                    tools:visibility="visible"/>
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="20dp"/>
+
+                <!-- Status row: dot + label -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="20dp">
+
+                    <View
+                        android:id="@+id/viewStatusDot"
+                        android:layout_width="9dp"
+                        android:layout_height="9dp"
+                        android:background="@drawable/dot_disconnected"
+                        android:layout_marginEnd="10dp"/>
+
+                    <TextView
+                        android:id="@+id/tvStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Disconnected"
+                        android:textColor="@color/status_disconnected"
+                        android:textSize="13.5sp"
+                        android:fontFamily="sans-serif"
+                        tools:text="Connected ✓"/>
+
+                </LinearLayout>
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/divider"
+                    android:layout_marginBottom="20dp"/>
+
+                <!-- Counters section label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="STATISTICS"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="0.12"
+                    android:layout_marginBottom="16dp"/>
+
+                <!-- Counters: Captured | Sent -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:weightSum="2">
+
+                    <!-- Captured counter -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal"
+                        android:background="@color/bg_input"
+                        android:padding="14dp"
+                        android:layout_marginEnd="8dp">
+
+                        <TextView
+                            android:id="@+id/tvNotifCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/text_primary"
+                            android:textSize="32sp"
+                            android:fontFamily="sans-serif-light"
+                            tools:text="42"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Captured"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp"
+                            android:fontFamily="sans-serif"
+                            android:paddingTop="2dp"/>
+
+                    </LinearLayout>
+
+                    <!-- Sent counter -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:gravity="center_horizontal"
+                        android:background="@color/bg_input"
+                        android:padding="14dp"
+                        android:layout_marginStart="0dp">
+
+                        <TextView
+                            android:id="@+id/tvNotifSentCount"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="0"
+                            android:textColor="@color/status_connected"
+                            android:textSize="32sp"
+                            android:fontFamily="sans-serif-light"
+                            tools:text="38"/>
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Sent"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp"
+                            android:fontFamily="sans-serif"
+                            android:paddingTop="2dp"/>
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- ── Footer ─────────────────────────────────────────────────────── -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Phone Notify · v2.0 · ws://?type=phone"
+            android:textColor="@color/text_muted"
+            android:textSize="10.5sp"
+            android:gravity="center"
+            android:paddingTop="20dp"
+            android:paddingBottom="8dp"/>
+
+    </LinearLayout>
+
+</ScrollView>

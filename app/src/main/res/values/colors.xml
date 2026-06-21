@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    colors.xml — Design Token Colors for Phone Notify
+    ───────────────────────────────────────────────────
+    Color philosophy:
+      - Pure black backgrounds (#000000) matching the Chrome extension
+      - Slightly lifted surface cards (#0f0f0f, #141414)
+      - Semantic status colors (green/yellow/red/gray) for connection state
+      - Warning banner uses amber tones — visible but not alarming
+-->
+<resources>
+
+    <!-- ── Background layers ──────────────────────────────────────────────── -->
+    <color name="bg_base">#FF000000</color>      <!-- Pure black root background   -->
+    <color name="bg_card">#FF0F0F0F</color>      <!-- Card surface                  -->
+    <color name="bg_input">#FF111111</color>     <!-- Input field background        -->
+
+    <!-- ── Text hierarchy ────────────────────────────────────────────────── -->
+    <color name="text_primary">#FFF0F0F0</color>     <!-- High-emphasis text           -->
+    <color name="text_secondary">#FF888888</color>   <!-- Medium-emphasis labels       -->
+    <color name="text_muted">#FF555555</color>       <!-- Low-emphasis / hints         -->
+
+    <!-- ── Borders & dividers ────────────────────────────────────────────── -->
+    <color name="divider">#1AFFFFFF</color>          <!-- 10% white — subtle lines     -->
+
+    <!-- ── Connection status dots & labels ───────────────────────────────── -->
+    <color name="status_connected">#FF22C55E</color>     <!-- Green  — socket open         -->
+    <color name="status_connecting">#FFFACC15</color>    <!-- Amber  — handshake in progress-->
+    <color name="status_disconnected">#FF555555</color>  <!-- Gray   — no connection        -->
+    <color name="status_error">#FFEF4444</color>         <!-- Red    — failure / error      -->
+
+    <!-- ── Buttons ───────────────────────────────────────────────────────── -->
+    <color name="btn_connect">#FF22C55E</color>      <!-- Connect / Retry              -->
+    <color name="btn_disconnect">#FFEF4444</color>   <!-- Disconnect                   -->
+
+    <!-- ── Permission banner (amber/orange palette) ──────────────────────── -->
+    <color name="warning_bg">#1AFACC15</color>       <!-- 10% amber fill               -->
+    <color name="warning_text">#FFFACC15</color>     <!-- Bright amber text            -->
+    <color name="warning_subtext">#99FACC15</color>  <!-- 60% amber for body           -->
+    <color name="warning_btn">#FFFACC15</color>      <!-- Full amber button            -->
+
+    <!-- ── Accent (used by Material theme for primary color) ─────────────── -->
+    <color name="colorPrimary">#FF22C55E</color>
+    <color name="colorPrimaryVariant">#FF16A34A</color>
+    <color name="colorOnPrimary">#FF000000</color>
+
+    <color name="colorSurface">#FF0F0F0F</color>
+    <color name="colorOnSurface">#FFF0F0F0</color>
+
+</resources>

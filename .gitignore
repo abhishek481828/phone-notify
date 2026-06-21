@@ -1,0 +1,12 @@
+# Node.js
+server/node_modules/
+server/.env
+
+# Android Build & IDE files
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store

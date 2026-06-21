@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    network_security_config.xml
+    ────────────────────────────
+    Android's <domain> element matches HOSTNAMES, not IP addresses.
+    There is no way to whitelist an IP range in Network Security Config.
+
+    For a LAN-only tool using ws:// (cleartext WebSocket), the correct approach
+    is to permit cleartext globally via <base-config>. This is safe because:
+      - The app is a personal developer tool that never leaves the local network.
+      - No sensitive credentials are transmitted over this channel.
+
+    When TLS is added (wss://), remove this file entirely and delete
+    android:networkSecurityConfig from AndroidManifest.xml.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,24 @@
+// settings.gradle — Project-level Gradle settings
+// Defines repository sources and which modules to include in the build.
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Project name as it appears in Android Studio
+rootProject.name = "PhoneNotify"
+
+// Include the app module
+include ':app'

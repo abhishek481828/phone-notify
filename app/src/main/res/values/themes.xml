@@ -1,0 +1,38 @@
+<resources>
+    <!--
+        Theme.PhoneNotify — Material 3 dark theme
+        ──────────────────────────────────────────
+        Inherits from Theme.MaterialComponents.DayNight.NoActionBar so we get
+        Material Design 3 components (CardView, TextInputLayout, Button) styled
+        automatically, while suppressing the default ActionBar (we use a custom header).
+    -->
+    <style name="Theme.PhoneNotify" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+
+        <!-- Primary / accent brand color (green) -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryVariant">@color/colorPrimaryVariant</item>
+        <item name="colorOnPrimary">@color/colorOnPrimary</item>
+
+        <!-- Background and surface -->
+        <item name="android:colorBackground">@color/bg_base</item>
+        <item name="colorSurface">@color/colorSurface</item>
+        <item name="colorOnSurface">@color/colorOnSurface</item>
+
+        <!-- Force dark mode regardless of system setting -->
+        <item name="android:forceDarkAllowed">false</item>
+
+        <!-- Status bar: translucent so the pure black screen bleeds through -->
+        <item name="android:statusBarColor">@color/bg_base</item>
+        <item name="android:navigationBarColor">@color/bg_base</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Default text appearance -->
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_muted</item>
+
+        <!-- TextInputLayout outline color when focused -->
+        <item name="colorControlActivated">@color/colorPrimary</item>
+        <item name="colorControlNormal">@color/divider</item>
+
+    </style>
+</resources>

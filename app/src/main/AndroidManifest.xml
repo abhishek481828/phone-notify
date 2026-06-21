@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AndroidManifest.xml — Phone Notify v2
+    ────────────────────────────────────────
+    Key changes from v1:
+      • FOREGROUND_SERVICE_DATA_SYNC for future persistent foreground service
+      • CHANGE_NETWORK_STATE for future Wi-Fi reconnect handling
+      • NotificationService has android:exported="true" (required for system binding)
+
+    Permission notes:
+      INTERNET                         — Required by OkHttp for WebSocket
+      FOREGROUND_SERVICE               — Required if we later run as a foreground service
+      QUERY_ALL_PACKAGES               — Required to resolve app names via PackageManager
+                                         (needed because target SDK 34 restricts package visibility)
+      BIND_NOTIFICATION_LISTENER_SERVICE — Applied to the service, not the app:
+                                         This RESTRICTS who can bind (only the OS).
+                                         It is NOT a <uses-permission> entry.
+
+    Notification Listener binding:
+      Android binds NotificationListenerService automatically when the user enables
+      Notification Access in Settings. The service MUST be declared with:
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+        <intent-filter> with action BIND_NOTIFICATION_LISTENER_SERVICE
+      Without both, the Settings toggle has no effect.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.mark.phonenotify">
+
+    <!-- ── Permissions ────────────────────────────────────────────────────── -->
+
+    <!-- OkHttp WebSocket connections over the local network -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Used if we later wrap the connection in a ForegroundService to survive
+         the app being backgrounded or killed by the system. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+    <!--
+        Required on Android 11+ (API 30+) to resolve installed app names via
+        PackageManager.getApplicationInfo(). Without this, resolveAppName()
+        throws NameNotFoundException for apps not declared in <queries>.
+        Marked with a lint suppression because Google Play requires justification
+        for this permission in the Play Console submission.
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission"/>
+
+    <!-- ── Application ────────────────────────────────────────────────────── -->
+
+    <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PhoneNotify"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- ── MainActivity ─────────────────────────────────────────────── -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!--
+            ── NotificationListenerService ────────────────────────────────────
+
+            CRITICAL DECLARATION — do not modify without understanding the
+            Android notification listener binding contract:
+
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+              → This REQUIRES that only the Android OS (which holds this permission)
+                can bind to this service. Prevents malicious apps from binding to it.
+                This is a required security control for NotificationListenerService.
+
+            android:exported="true"
+              → Must be true because the OS (a different process) needs to bind to it.
+
+            <intent-filter> with BIND_NOTIFICATION_LISTENER_SERVICE action
+              → Tells the OS that this service is a notification listener.
+                Without this filter, the Notification Access settings screen will
+                not show "Phone Notify" in its list, so users cannot grant access.
+
+            SettingsActivity reference in <meta-data>:
+              → Optional: tells the Settings screen to show a cog icon that opens
+                a settings activity. Not implemented in v1 but the placeholder
+                is here for future use.
+        -->
+        <service
+            android:name=".NotificationService"
+            android:exported="true"
+            android:label="@string/notification_service_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+
+        </service>
+
+    </application>
+
+</manifest>

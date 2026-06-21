@@ -1,0 +1,30 @@
+{
+  "name": "phone-notify-server",
+  "version": "2.0.0",
+  "description": "WebSocket relay server for Phone Notify — bridges Android notifications to Chrome extensions",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start":          "node server.js",
+    "start:debug":    "DEBUG=true node server.js",
+    "test:notify":    "node test-client.js",
+    "test:whatsapp":  "node test-client.js whatsapp",
+    "test:telegram":  "node test-client.js telegram",
+    "test:gmail":     "node test-client.js gmail",
+    "test:instagram": "node test-client.js instagram",
+    "test:discord":   "node test-client.js discord"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "websocket",
+    "notifications",
+    "android",
+    "chrome-extension",
+    "relay"
+  ],
+  "license": "MIT"
+}

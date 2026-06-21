@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    count_bump.xml — Brief scale-up animation played on the notification counter
+    when a new notification arrives. Gives a satisfying tactile feedback in the UI.
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fillAfter="true">
+
+    <scale
+        android:fromXScale="1.0"
+        android:toXScale="1.25"
+        android:fromYScale="1.0"
+        android:toYScale="1.25"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:duration="100"
+        android:interpolator="@android:anim/accelerate_interpolator" />
+
+    <scale
+        android:fromXScale="1.25"
+        android:toXScale="1.0"
+        android:fromYScale="1.25"
+        android:toYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:duration="120"
+        android:startOffset="100"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+
+</set>

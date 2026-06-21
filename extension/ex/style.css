@@ -1,0 +1,647 @@
+/*
+ * style.css — Phone Notify Side Panel
+ * Clean, readable dark UI. Linear × Vercel inspired.
+ */
+
+/* ─── 1. Critical: fix hidden attribute overridden by CSS display ─────────── */
+[hidden] { display: none !important; }
+
+/* ─── 2. Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  --bg-base:    #0a0a0a;
+  --bg-card:    #141414;
+  --bg-hover:   #1c1c1c;
+  --bg-input:   #111111;
+
+  --border:       rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.15);
+
+  --text-1: #f0f0f0;   /* primary */
+  --text-2: #888;      /* secondary */
+  --text-3: #4a4a4a;   /* muted */
+
+  --green:  #22c55e;
+  --red:    #ef4444;
+
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   12px;
+  --r-pill: 999px;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --t:    160ms;
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* ─── 3. Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── 4. Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: var(--r-pill); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+
+/* ─── 5. App Shell ──────────────────────────────────────────────────────────── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+/* ─── 6. Header ─────────────────────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 11px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.header-left { display: flex; align-items: center; gap: 8px; }
+.header-right { display: flex; align-items: center; gap: 6px; }
+
+.brand { display: flex; align-items: center; gap: 7px; }
+.brand-icon { font-size: 16px; }
+.brand-name { font-size: 14px; font-weight: 650; color: var(--text-1); letter-spacing: -0.3px; }
+
+/* ─── 7. WS Status Pill ─────────────────────────────────────────────────────── */
+.ws-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+}
+
+.ws-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+  transition: background var(--t) var(--ease);
+}
+
+.ws-dot.connected {
+  background: var(--green);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+}
+
+.ws-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  transition: color var(--t) var(--ease);
+}
+
+.ws-status.connected .ws-label { color: var(--green); }
+
+/* ─── 8. Badge ──────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  transition: all var(--t) var(--ease);
+}
+
+.badge.has-count {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.16);
+  color: var(--text-1);
+}
+
+/* ─── 9. Icon Button ────────────────────────────────────────────────────────── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all var(--t) var(--ease);
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+  border-color: var(--border-hover);
+}
+
+/* ─── 10. Search ────────────────────────────────────────────────────────────── */
+.search-wrapper {
+  position: relative;
+  margin: 10px 12px 8px;
+  flex-shrink: 0;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 32px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: 12.5px;
+  outline: none;
+  transition: border-color var(--t) var(--ease);
+}
+
+.search-input::placeholder { color: var(--text-3); }
+.search-input:focus { border-color: var(--border-hover); }
+.search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ─── 11. Filter Pills ──────────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.filter-bar::-webkit-scrollbar { display: none; }
+
+.filter-pill {
+  flex-shrink: 0;
+  padding: 3px 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--t) var(--ease);
+}
+
+.filter-pill:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-hover); }
+.filter-pill.active { background: rgba(255,255,255,0.09); color: var(--text-1); border-color: rgba(255,255,255,0.2); font-weight: 600; }
+
+/* ─── 12. Notification List ─────────────────────────────────────────────────── */
+#notification-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* ─── 13. Notification Card ─────────────────────────────────────────────────── */
+.notif-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px 11px 14px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+  animation: card-in 220ms var(--ease) both;
+  animation-delay: calc(var(--card-index, 0) * 30ms);
+  transition: background var(--t) var(--ease), border-color var(--t) var(--ease), transform var(--t) var(--ease);
+  /* Left accent line */
+  border-left: 3px solid var(--accent, rgba(255,255,255,0.1));
+}
+
+.notif-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.notif-card:active { transform: translateY(0); }
+
+/* ─── 14. App Avatar ────────────────────────────────────────────────────────── */
+.app-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-top: 1px;
+  /* bg + border-color set inline */
+}
+
+/* ─── 15. Card Text Block ───────────────────────────────────────────────────── */
+.card-text {
+  flex: 1;
+  min-width: 0;          /* CRITICAL: allows text-overflow: ellipsis to work */
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Row 1: app name + time */
+.card-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.card-app {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* color set inline to app brand color */
+}
+
+.card-time {
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Row 2: title (sender / notification title) */
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Row 3: message body */
+.card-message {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Unread indicator */
+.card-unread-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #fff);
+  margin-left: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ─── 16. Unread card ───────────────────────────────────────────────────────── */
+.notif-card.unread { background: #161616; }
+.notif-card.unread .card-title { color: #fff; }
+.notif-card.unread .card-message { color: #999; }
+.notif-card.unread .card-time { color: var(--text-2); }
+
+/* ─── 17. Dismiss button ────────────────────────────────────────────────────── */
+.card-dismiss {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  align-self: flex-start;
+  margin-top: 1px;
+  opacity: 0;
+  transition: opacity var(--t) var(--ease), background var(--t) var(--ease), color var(--t) var(--ease);
+  /* pointer-events:none when invisible so it doesn't block card clicks */
+  pointer-events: none;
+}
+
+.notif-card:hover .card-dismiss {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.card-dismiss:hover {
+  background: rgba(255,255,255,0.09);
+  color: var(--text-1);
+}
+
+/* ─── 18. Dismiss animation ─────────────────────────────────────────────────── */
+@keyframes card-out {
+  to { opacity: 0; transform: translateX(20px); max-height: 0; margin: 0; padding: 0; }
+}
+
+.notif-card.dismissing {
+  animation: card-out 200ms var(--ease) forwards;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ─── 19. Empty State ───────────────────────────────────────────────────────── */
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  animation: fade-in 250ms var(--ease) both;
+}
+
+.empty-icon { font-size: 40px; opacity: 0.25; margin-bottom: 4px; }
+.empty-title { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.empty-sub { font-size: 12px; color: var(--text-3); text-align: center; line-height: 1.6; }
+
+/* ─── 20. Footer ────────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.footer-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex-shrink: 0;
+  transition: background var(--t) var(--ease);
+}
+
+.footer-live-dot.connected {
+  background: var(--green);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+}
+
+.footer-live-dot.phone-offline {
+  background: #eab308;
+}
+
+/* ─── 21. Animations ────────────────────────────────────────────────────────── */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse-dot {
+  0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.5); }
+  60%  { box-shadow: 0 0 0 5px rgba(34,197,94,0);   }
+  100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);   }
+}
+
+/* ─── 22. Settings Panel ────────────────────────────────────────────────────── */
+.settings-panel {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(10, 10, 10, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+  animation: fade-in 200ms var(--ease) both;
+}
+
+.settings-content {
+  width: 100%;
+  max-width: 290px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+.settings-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-1);
+  letter-spacing: -0.2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.settings-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.settings-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--t) var(--ease);
+}
+
+.settings-input:focus {
+  border-color: var(--border-hover);
+}
+
+.settings-hint {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.settings-btn-action {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t) var(--ease);
+  outline: none;
+  border: 1px solid transparent;
+}
+
+.settings-btn-action.secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+.settings-btn-action.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+  border-color: var(--border-hover);
+}
+
+.settings-btn-action.primary {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 600;
+}
+
+.settings-btn-action.primary:hover {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+/* ─── 23. Quick Reply UI ───────────────────────────────────────────────────── */
+.card-reply-container {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-reply-btn {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t) var(--ease);
+  outline: none;
+}
+
+.card-reply-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--text-1);
+}
+
+.card-reply-box {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  animation: fade-in 180ms var(--ease) both;
+}
+
+.card-reply-input {
+  flex: 1;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-size: 11.5px;
+  outline: none;
+  transition: border-color var(--t) var(--ease);
+}
+
+.card-reply-input:focus {
+  border-color: var(--border-hover);
+}
+
+.card-reply-send {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  border: none;
+  background: #ffffff;
+  color: #000000;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t) var(--ease);
+  outline: none;
+}
+
+.card-reply-send:hover {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.card-reply-send:disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+
