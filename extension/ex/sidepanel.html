@@ -4,6 +4,7 @@
   Design: Premium dark glassmorphism, Linear × Arc Browser inspired.
 -->
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,6 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div id="app">
 
@@ -20,7 +22,12 @@
     <header class="header">
       <div class="header-left">
         <div class="brand">
-          <span class="brand-icon">📱</span>
+          <svg class="brand-logo" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="3" ry="3" />
+            <path d="M12 18h.01" stroke-width="3" />
+            <path d="M12 6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-4 0V8a2 2 0 0 1 2-2z" />
+            <path d="M10.3 14.5a2.5 2.5 0 0 0 3.4 0" />
+          </svg>
           <span class="brand-name">Phone Notify</span>
         </div>
       </div>
@@ -31,19 +38,21 @@
         </div>
         <span class="badge" id="notif-count" title="Unread notifications">0</span>
         <button class="icon-btn" id="settings-btn" title="Server Settings" aria-label="Settings">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
         <button class="icon-btn" id="clear-btn" title="Clear all notifications" aria-label="Clear all">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14H6L5 6"/>
-            <path d="M10 11v6"/><path d="M14 11v6"/>
-            <path d="M9 6V4h6v2"/>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14H6L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+            <path d="M9 6V4h6v2" />
           </svg>
         </button>
       </div>
@@ -51,18 +60,13 @@
 
     <!-- ── Search ── -->
     <div class="search-wrapper">
-      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
-      <input
-        type="search"
-        id="search-input"
-        class="search-input"
-        placeholder="Search notifications…"
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <input type="search" id="search-input" class="search-input" placeholder="Search notifications…" autocomplete="off"
+        spellcheck="false" />
     </div>
 
     <!-- ── Filter Pills ── -->
@@ -86,36 +90,26 @@
     <div class="settings-panel" id="settings-panel" hidden>
       <div class="settings-content">
         <h3 class="settings-title">Relay Settings</h3>
-        
+
         <div class="settings-group">
           <label for="settings-url">Relay Server URL</label>
-          <input
-            type="text"
-            id="settings-url"
-            class="settings-input"
-            placeholder="ws://localhost:8080"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <span class="settings-hint">Laptop IP (ws://192.168.1.50:8080) or cloud URL (wss://your-relay.onrender.com).</span>
+          <input type="text" id="settings-url" class="settings-input" placeholder="ws://localhost:8080"
+            autocomplete="off" spellcheck="false" />
+          <span class="settings-hint">Laptop IP (ws://192.168.1.50:8080) or cloud URL
+            (wss://your-relay.onrender.com).</span>
         </div>
 
         <div class="settings-group">
           <label for="settings-token">Access Token</label>
-          <input
-            type="password"
-            id="settings-token"
-            class="settings-input"
-            placeholder="Optional secret token"
-            autocomplete="off"
-          />
+          <input type="password" id="settings-token" class="settings-input" placeholder="Optional secret token"
+            autocomplete="off" />
           <span class="settings-hint">Matches server's TOKEN env variable. Required for public servers.</span>
         </div>
 
         <div class="settings-group" id="settings-ips-group" style="display: none;">
-          <label>Laptop IPs for Phone</label>
-          <div id="settings-ips-list" class="ips-list"></div>
-          <span class="settings-hint">Input one of these IP addresses and port 8080 in the Phone Notify app.</span>
+          <label>Available Laptop IPs</label>
+          <div class="ips-list" id="settings-ips-list"></div>
+          <span class="settings-hint">Click an IP to connect directly.</span>
         </div>
 
         <div class="settings-actions">
@@ -135,4 +129,5 @@
 
   <script src="sidepanel.js"></script>
 </body>
+
 </html>

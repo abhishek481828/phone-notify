@@ -273,15 +273,7 @@ class MainActivity : AppCompatActivity() {
             is ConnectionStatus.Error -> {
                 binding.tvStatus.setTextColor(color(R.color.status_error))
                 binding.viewStatusDot.setBackgroundResource(R.drawable.dot_error)
-                val errMsg = status.message
-                val tip = if (errMsg.contains("failed to connect", ignoreCase = true) || 
-                              errMsg.contains("timeout", ignoreCase = true) || 
-                              errMsg.contains("route to host", ignoreCase = true)) {
-                    "\nTip: Check if laptop IP changed or if Tailscale is disconnected."
-                } else {
-                    ""
-                }
-                binding.tvStatus.text = "Error: ${errMsg.take(55)}$tip"
+                binding.tvStatus.text = "Error: ${status.message.take(55)}"
                 binding.btnConnect.text = getString(R.string.btn_retry)
                 binding.btnConnect.setBackgroundColor(color(R.color.btn_connect))
                 binding.btnConnect.isEnabled  = true

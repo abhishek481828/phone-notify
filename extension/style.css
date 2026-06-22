@@ -1,41 +1,56 @@
 /*
  * style.css — Phone Notify Side Panel
- * Clean, readable dark UI. Linear × Vercel inspired.
+ * Design: Premium Dark Glassmorphism, Linear × Apple inspired.
  */
 
-/* ─── 1. Critical: fix hidden attribute overridden by CSS display ─────────── */
+/* ─── 1. Critical hidden attribute fallback ────────────────────────────────── */
 [hidden] { display: none !important; }
 
 /* ─── 2. Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  --bg-base:    #0a0a0a;
-  --bg-card:    #141414;
-  --bg-hover:   #1c1c1c;
-  --bg-input:   #111111;
+  /* Color Palette */
+  --bg-base:      #000000;
+  --bg-glass:     rgba(0, 0, 0, 0.75);
+  --bg-card:      rgba(10, 10, 12, 0.6);
+  --bg-hover:     rgba(20, 20, 25, 0.7);
+  --bg-input:     rgba(5, 5, 6, 0.95);
+  
+  /* Borders */
+  --border:       rgba(255, 255, 255, 0.06);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-focus: rgba(99, 102, 241, 0.4);
 
-  --border:       rgba(255,255,255,0.08);
-  --border-hover: rgba(255,255,255,0.15);
+  /* Typography */
+  --text-1:       #ffffff;   /* Primary */
+  --text-2:       #94a3b8;   /* Secondary */
+  --text-3:       #475569;   /* Muted */
+  
+  /* Status Colors */
+  --green:        #10b981;   /* Live/Connected */
+  --red:          #f43f5e;   /* Alert */
+  --accent:       #6366f1;   /* Electric Indigo */
+  --accent-glow:  rgba(99, 102, 241, 0.2);
 
-  --text-1: #f0f0f0;   /* primary */
-  --text-2: #888;      /* secondary */
-  --text-3: #4a4a4a;   /* muted */
+  /* Border Radii */
+  --r-sm:         6px;
+  --r-md:         10px;
+  --r-lg:         14px;
+  --r-pill:       999px;
 
-  --green:  #22c55e;
-  --red:    #ef4444;
+  /* Transitions */
+  --ease:         cubic-bezier(0.16, 1, 0.3, 1); /* ultra smooth ease-out */
+  --t-fast:       150ms;
+  --t-normal:     250ms;
 
-  --r-sm:   6px;
-  --r-md:   10px;
-  --r-lg:   12px;
-  --r-pill: 999px;
-
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --t:    160ms;
-
-  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --font:         "Inter", system-ui, -apple-system, sans-serif;
 }
 
 /* ─── 3. Reset ──────────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 html, body {
   width: 100%;
@@ -47,16 +62,27 @@ body {
   font-family: var(--font);
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text-1);
+  color: var(--text-2);
   background: var(--bg-base);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ─── 4. Scrollbar ──────────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: var(--r-pill); }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
 
 /* ─── 5. App Shell ──────────────────────────────────────────────────────────── */
 #app {
@@ -64,7 +90,7 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: var(--bg-base);
+  position: relative;
 }
 
 /* ─── 6. Header ─────────────────────────────────────────────────────────────── */
@@ -72,72 +98,116 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px 11px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   flex-shrink: 0;
+  z-index: 10;
 }
 
-.header-left { display: flex; align-items: center; gap: 8px; }
-.header-right { display: flex; align-items: center; gap: 6px; }
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-.brand { display: flex; align-items: center; gap: 7px; }
-.brand-icon { font-size: 16px; }
-.brand-name { font-size: 14px; font-weight: 650; color: var(--text-1); letter-spacing: -0.3px; }
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand-logo {
+  color: var(--accent);
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+  transition: transform 0.5s var(--ease);
+}
+
+.brand:hover .brand-logo {
+  transform: rotate(-10deg) scale(1.1);
+}
+
+.brand-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.4px;
+}
 
 /* ─── 7. WS Status Pill ─────────────────────────────────────────────────────── */
 .ws-status {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
+  transition: all var(--t-normal) var(--ease);
+}
+
+.ws-status.connected {
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.05);
 }
 
 .ws-dot {
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-3);
   flex-shrink: 0;
-  transition: background var(--t) var(--ease);
+  transition: background var(--t-fast) var(--ease);
 }
 
 .ws-dot.connected {
   background: var(--green);
-  animation: pulse-dot 2.5s ease-in-out infinite;
+  animation: pulse-dot 2s infinite;
 }
 
 .ws-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
   color: var(--text-3);
-  transition: color var(--t) var(--ease);
+  transition: color var(--t-fast) var(--ease);
 }
 
-.ws-status.connected .ws-label { color: var(--green); }
+.ws-status.connected .ws-label {
+  color: var(--green);
+}
 
 /* ─── 8. Badge ──────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
+  min-width: 18px;
+  height: 18px;
   padding: 0 5px;
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
   background: transparent;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-3);
-  transition: all var(--t) var(--ease);
+  transition: all var(--t-normal) var(--ease);
 }
 
 .badge.has-count {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.16);
+  background: var(--accent);
+  border-color: transparent;
   color: var(--text-1);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 /* ─── 9. Icon Button ────────────────────────────────────────────────────────── */
@@ -145,40 +215,49 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-2);
   cursor: pointer;
-  transition: all var(--t) var(--ease);
+  outline: none;
+  transition: all var(--t-fast) var(--ease);
 }
 
 .icon-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
   border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.icon-btn:active {
+  transform: translateY(0);
 }
 
 /* ─── 10. Search ────────────────────────────────────────────────────────────── */
 .search-wrapper {
   position: relative;
-  margin: 10px 12px 8px;
+  margin: 14px 16px 10px;
   flex-shrink: 0;
 }
 
 .search-icon {
   position: absolute;
-  left: 10px; top: 50%;
+  left: 12px;
+  top: 50%;
   transform: translateY(-50%);
   color: var(--text-3);
   pointer-events: none;
+  transition: color var(--t-fast) var(--ease);
 }
 
 .search-input {
   width: 100%;
-  height: 34px;
-  padding: 0 12px 0 32px;
+  height: 36px;
+  padding: 0 12px 0 34px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--bg-input);
@@ -186,52 +265,83 @@ body {
   font-family: var(--font);
   font-size: 12.5px;
   outline: none;
-  transition: border-color var(--t) var(--ease);
+  transition: all var(--t-normal) var(--ease);
 }
 
-.search-input::placeholder { color: var(--text-3); }
-.search-input:focus { border-color: var(--border-hover); }
-.search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.search-input::placeholder {
+  color: var(--text-3);
+}
+
+.search-input:focus {
+  border-color: var(--border-focus);
+  background: rgba(15, 15, 20, 0.95);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.search-input:focus ~ .search-icon {
+  color: var(--accent);
+}
+
+.search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
 
 /* ─── 11. Filter Pills ──────────────────────────────────────────────────────── */
 .filter-bar {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 12px 10px;
+  gap: 6px;
+  padding: 0 16px 12px;
   overflow-x: auto;
   scrollbar-width: none;
   flex-shrink: 0;
+  mask-image: linear-gradient(to right, transparent, white 10px, white 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, white 10px, white 90%, transparent);
 }
 
-.filter-bar::-webkit-scrollbar { display: none; }
+.filter-bar::-webkit-scrollbar {
+  display: none;
+}
 
 .filter-pill {
   flex-shrink: 0;
-  padding: 3px 11px;
+  padding: 4px 12px;
   border-radius: var(--r-pill);
   border: 1px solid var(--border);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text-2);
   font-family: var(--font);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--t) var(--ease);
+  outline: none;
+  transition: all var(--t-normal) var(--ease);
 }
 
-.filter-pill:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--border-hover); }
-.filter-pill.active { background: rgba(255,255,255,0.09); color: var(--text-1); border-color: rgba(255,255,255,0.2); font-weight: 600; }
+.filter-pill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.filter-pill.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  border-color: rgba(255, 255, 255, 0.2);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
 
 /* ─── 12. Notification List ─────────────────────────────────────────────────── */
 #notification-list {
   flex: 1;
   overflow-y: auto;
-  padding: 6px 10px 12px;
+  padding: 4px 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
 }
 
 /* ─── 13. Notification Card ─────────────────────────────────────────────────── */
@@ -239,26 +349,30 @@ body {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 11px 12px 11px 14px;
+  gap: 12px;
+  padding: 12px 14px;
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   background: var(--bg-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
-  animation: card-in 220ms var(--ease) both;
+  animation: card-in 300ms var(--ease) both;
   animation-delay: calc(var(--card-index, 0) * 30ms);
-  transition: background var(--t) var(--ease), border-color var(--t) var(--ease), transform var(--t) var(--ease);
-  /* Left accent line */
-  border-left: 3px solid var(--accent, rgba(255,255,255,0.1));
+  transition: all var(--t-normal) var(--ease);
+  border-left: 3.5px solid var(--accent, rgba(255, 255, 255, 0.1)) !important;
 }
 
 .notif-card:hover {
   background: var(--bg-hover);
   border-color: var(--border-hover);
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
-.notif-card:active { transform: translateY(0); }
+.notif-card:active {
+  transform: translateY(-1px) scale(0.995);
+}
 
 /* ─── 14. App Avatar ────────────────────────────────────────────────────────── */
 .app-avatar {
@@ -270,48 +384,53 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  margin-top: 1px;
-  /* bg + border-color set inline */
+  margin-top: 2px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform var(--t-normal) var(--ease);
+}
+
+.notif-card:hover .app-avatar {
+  transform: scale(1.05);
 }
 
 /* ─── 15. Card Text Block ───────────────────────────────────────────────────── */
 .card-text {
   flex: 1;
-  min-width: 0;          /* CRITICAL: allows text-overflow: ellipsis to work */
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
-/* Row 1: app name + time */
+/* Row 1: App Name & Timestamp */
 .card-row1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
 }
 
 .card-app {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  /* color set inline to app brand color */
 }
 
 .card-time {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--text-3);
   white-space: nowrap;
   flex-shrink: 0;
+  font-weight: 500;
 }
 
-/* Row 2: title (sender / notification title) */
+/* Row 2: Title */
 .card-title {
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--text-1);
   white-space: nowrap;
@@ -319,37 +438,44 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Row 3: message body */
+/* Row 3: Message Body */
 .card-message {
   font-size: 12px;
   color: var(--text-2);
-  line-height: 1.45;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  margin-top: 1px;
 }
 
-/* Unread indicator */
+/* Unread indicator dot */
 .card-unread-dot {
   display: inline-block;
-  width: 6px; height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--accent, #fff);
+  background: var(--accent, #6366f1);
   margin-left: 6px;
   vertical-align: middle;
   flex-shrink: 0;
+  box-shadow: 0 0 8px var(--accent);
 }
 
-/* ─── 16. Unread card ───────────────────────────────────────────────────────── */
-.notif-card.unread { background: #161616; }
-.notif-card.unread .card-title { color: #fff; }
-.notif-card.unread .card-message { color: #999; }
-.notif-card.unread .card-time { color: var(--text-2); }
+/* ─── 16. Unread Card Styling ────────────────────────────────────────────────── */
+.notif-card.unread {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.notif-card.unread:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
 
-/* ─── 17. Dismiss button ────────────────────────────────────────────────────── */
+/* ─── 17. Dismiss Button ────────────────────────────────────────────────────── */
 .card-dismiss {
   flex-shrink: 0;
-  width: 20px; height: 20px;
-  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
   border: none;
   background: transparent;
   color: var(--text-3);
@@ -357,14 +483,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  line-height: 1;
-  align-self: flex-start;
-  margin-top: 1px;
   opacity: 0;
-  transition: opacity var(--t) var(--ease), background var(--t) var(--ease), color var(--t) var(--ease);
-  /* pointer-events:none when invisible so it doesn't block card clicks */
+  transition: all var(--t-fast) var(--ease);
   pointer-events: none;
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .notif-card:hover .card-dismiss {
@@ -373,17 +496,42 @@ body {
 }
 
 .card-dismiss:hover {
-  background: rgba(255,255,255,0.09);
-  color: var(--text-1);
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--red);
+  transform: scale(1.15) rotate(90deg);
 }
 
-/* ─── 18. Dismiss animation ─────────────────────────────────────────────────── */
+.card-dismiss:active {
+  transform: scale(0.9) rotate(90deg);
+}
+
+/* ─── 18. Card entry & dismiss animations ────────────────────────────────────── */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
 @keyframes card-out {
-  to { opacity: 0; transform: translateX(20px); max-height: 0; margin: 0; padding: 0; }
+  to {
+    opacity: 0;
+    transform: translateX(30px) scale(0.95);
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
 }
 
 .notif-card.dismissing {
-  animation: card-out 200ms var(--ease) forwards;
+  animation: card-out 250ms var(--ease) forwards;
   overflow: hidden;
   pointer-events: none;
 }
@@ -395,118 +543,172 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 32px 20px;
-  animation: fade-in 250ms var(--ease) both;
+  gap: 12px;
+  padding: 32px 24px;
+  animation: fade-in 300ms var(--ease) both;
 }
 
-.empty-icon { font-size: 40px; opacity: 0.25; margin-bottom: 4px; }
-.empty-title { font-size: 14px; font-weight: 600; color: var(--text-2); }
-.empty-sub { font-size: 12px; color: var(--text-3); text-align: center; line-height: 1.6; }
+.empty-icon {
+  font-size: 44px;
+  opacity: 0.15;
+  margin-bottom: 4px;
+  animation: pulse-slow 4s infinite ease-in-out;
+}
+
+.empty-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.empty-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  line-height: 1.6;
+  max-width: 220px;
+}
 
 /* ─── 20. Footer ────────────────────────────────────────────────────────────── */
 .footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
+  gap: 8px;
+  padding: 10px 16px;
   border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.45);
   font-size: 11px;
+  font-weight: 500;
   color: var(--text-3);
   flex-shrink: 0;
+  z-index: 10;
 }
 
 .footer-live-dot {
-  width: 6px; height: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--text-3);
   flex-shrink: 0;
-  transition: background var(--t) var(--ease);
+  transition: all var(--t-normal) var(--ease);
 }
 
 .footer-live-dot.connected {
   background: var(--green);
-  animation: pulse-dot 2.5s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse-dot-small 2s infinite;
 }
 
 .footer-live-dot.phone-offline {
-  background: #eab308;
+  background: #f59e0b;
+  box-shadow: 0 0 6px #f59e0b;
 }
 
-/* ─── 21. Animations ────────────────────────────────────────────────────────── */
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+#footer-text {
+  letter-spacing: 0.2px;
 }
 
+/* ─── 21. General Keyframes ──────────────────────────────────────────────────── */
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
 @keyframes pulse-dot {
-  0%   { box-shadow: 0 0 0 0   rgba(34,197,94,0.5); }
-  60%  { box-shadow: 0 0 0 5px rgba(34,197,94,0);   }
-  100% { box-shadow: 0 0 0 0   rgba(34,197,94,0);   }
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+  70%  { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);   }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);   }
+}
+
+@keyframes pulse-dot-small {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  70%  { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);   }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);   }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { transform: scale(1); opacity: 0.15; }
+  50%      { transform: scale(1.05); opacity: 0.25; }
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.spin-loading {
+  animation: spin 1s linear infinite;
 }
 
 /* ─── 22. Settings Panel ────────────────────────────────────────────────────── */
 .settings-panel {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(10, 10, 10, 0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
   padding: 16px;
-  animation: fade-in 200ms var(--ease) both;
+  animation: fade-in var(--t-normal) var(--ease) both;
+}
+
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(12px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
 }
 
 .settings-content {
   width: 100%;
-  max-width: 290px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  max-width: 300px;
+  background: rgba(10, 10, 12, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--r-lg);
-  padding: 18px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  gap: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  animation: settings-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .settings-title {
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--text-1);
   letter-spacing: -0.2px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 8px;
-  margin-bottom: 2px;
+  padding-bottom: 10px;
 }
 
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .settings-group label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-2);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
 }
 
 .settings-input {
   width: 100%;
-  height: 32px;
-  padding: 0 9px;
+  height: 34px;
+  padding: 0 10px;
   border-radius: var(--r-md);
   border: 1px solid var(--border);
   background: var(--bg-input);
@@ -514,34 +716,37 @@ body {
   font-family: var(--font);
   font-size: 12px;
   outline: none;
-  transition: border-color var(--t) var(--ease);
+  transition: all var(--t-normal) var(--ease);
 }
 
 .settings-input:focus {
-  border-color: var(--border-hover);
+  border-color: var(--border-focus);
+  background: rgba(10, 10, 12, 0.95);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .settings-hint {
   font-size: 10px;
   color: var(--text-3);
-  line-height: 1.35;
+  line-height: 1.4;
+  margin-top: 1px;
 }
 
 .settings-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 6px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .settings-btn-action {
-  height: 30px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: var(--r-sm);
   font-size: 11.5px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--t) var(--ease);
+  transition: all var(--t-fast) var(--ease);
   outline: none;
   border: 1px solid transparent;
 }
@@ -553,7 +758,7 @@ body {
 }
 
 .settings-btn-action.secondary:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-1);
   border-color: var(--border-hover);
 }
@@ -561,11 +766,16 @@ body {
 .settings-btn-action.primary {
   background: #ffffff;
   color: #000000;
-  font-weight: 600;
 }
 
 .settings-btn-action.primary:hover {
   background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.settings-btn-action.primary:active {
+  transform: translateY(0);
 }
 
 /* ─── 23. Quick Reply UI ───────────────────────────────────────────────────── */
@@ -577,35 +787,53 @@ body {
 
 .card-reply-btn {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   color: var(--text-2);
   padding: 4px 10px;
   border-radius: var(--r-sm);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--t) var(--ease);
+  display: inline-flex;
+  align-items: center;
+  transition: all var(--t-fast) var(--ease);
   outline: none;
 }
 
 .card-reply-btn:hover {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.06);
   border-color: var(--border-hover);
   color: var(--text-1);
+  transform: translateY(-1px);
+}
+
+.card-reply-btn:active {
+  transform: translateY(0);
+}
+
+@keyframes reply-box-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .card-reply-box {
   display: flex;
   gap: 6px;
   width: 100%;
-  animation: fade-in 180ms var(--ease) both;
+  animation: reply-box-in 280ms var(--ease) both;
 }
 
 .card-reply-input {
   flex: 1;
-  height: 28px;
-  padding: 0 8px;
+  height: 30px;
+  padding: 0 10px;
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--bg-input);
@@ -613,69 +841,97 @@ body {
   font-family: var(--font);
   font-size: 11.5px;
   outline: none;
-  transition: border-color var(--t) var(--ease);
+  transition: all var(--t-normal) var(--ease);
 }
 
 .card-reply-input:focus {
-  border-color: var(--border-hover);
+  border-color: var(--border-focus);
+  background: rgba(10, 10, 12, 0.95);
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .card-reply-send {
-  height: 28px;
-  padding: 0 10px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--r-sm);
   border: none;
   background: #ffffff;
   color: #000000;
-  font-size: 11px;
-  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: background var(--t) var(--ease);
+  transition: all var(--t-fast) var(--ease);
   outline: none;
+  flex-shrink: 0;
 }
 
 .card-reply-send:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 10px rgba(255, 255, 255, 0.2);
+}
+
+.card-reply-send:active {
+  transform: scale(0.95);
 }
 
 .card-reply-send:disabled {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-3);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-/* ─── 24. IPs List Styling ─── */
+/* ─── 24. IPs List Styling ─────────────────────────────────────────────────── */
 .ips-list {
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 8px 10px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 2px;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .ip-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-family: monospace;
-  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.ip-item:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .ip-address {
-  user-select: all;
+  font-family: monospace;
+  font-size: 11px;
   color: var(--text-1);
 }
 
 .ip-name {
   font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  color: var(--text-3);
-  background: var(--border);
-  padding: 1px 4px;
-  border-radius: 3px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
+/* Flash feedback animation for input connection select */
+@keyframes highlight-pulse {
+  0%   { border-color: rgba(255,255,255,0.08); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  50%  { border-color: var(--green); box-shadow: 0 0 12px rgba(16, 185, 129, 0.4); }
+  100% { border-color: rgba(255,255,255,0.08); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
 
+.highlight-flash {
+  animation: highlight-pulse 0.8s ease-in-out;
+}

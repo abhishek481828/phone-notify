@@ -155,6 +155,13 @@ async function connectWebSocket() {
         return;
       }
 
+      // ── Handle server IPs ─────────────────────────────────────────────────
+      if (data.type === "server_ips") {
+        await chrome.storage.local.set({ serverIps: data.ips });
+        chrome.runtime.sendMessage({ type: "SERVER_IPS", ips: data.ips }).catch(() => { });
+        return;
+      }
+
       // ── Handle bulk history ────────────────────────────────────────────────
       if (data.type === "history") {
         const result = await chrome.storage.local.get({ notifications: [] });

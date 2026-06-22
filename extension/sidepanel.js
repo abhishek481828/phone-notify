@@ -15,6 +15,50 @@
 
 "use strict";
 
+// Mock chrome APIs for testing/previewing in standard browsers
+if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.onMessage) {
+  window.isMockChrome = true;
+  window.chrome = {
+    runtime: {
+      connect: () => ({
+        postMessage: () => {},
+        onDisconnect: { addListener: () => {} },
+        onMessage: { addListener: () => {} }
+      }),
+      sendMessage: async (msg) => {
+        console.log("[Mock Chrome] Sent message:", msg);
+        return { success: true };
+      },
+      onMessage: {
+        addListener: (listener) => {
+          window.addEventListener("message", (event) => {
+            if (event.data && event.data.source === "mock-chrome-message") {
+              listener(event.data.payload);
+            }
+          });
+        }
+      }
+    },
+    storage: {
+      local: {
+        get: async (keys) => {
+          const res = {};
+          for (const key in keys) {
+            const val = localStorage.getItem(`mock_chrome_${key}`);
+            res[key] = val ? JSON.parse(val) : keys[key];
+          }
+          return res;
+        },
+        set: async (obj) => {
+          for (const key in obj) {
+            localStorage.setItem(`mock_chrome_${key}`, JSON.stringify(obj[key]));
+          }
+        }
+      }
+    }
+  };
+}
+
 // Keep the background service worker alive while the side panel is open
 const port = chrome.runtime.connect({ name: "sidepanel" });
 setInterval(() => {
@@ -139,6 +183,7 @@ const settingsUrl    = document.getElementById("settings-url");
 const settingsToken  = document.getElementById("settings-token");
 const settingsCancel = document.getElementById("settings-cancel");
 const settingsSave   = document.getElementById("settings-save");
+const ipsList        = document.getElementById("settings-ips-list");
 
 // ─── 4. Timestamp Formatting ──────────────────────────────────────────────────
 
@@ -250,20 +295,36 @@ function createCard(n, index) {
       
       ${n.replyable ? `
         <div class="card-reply-container">
-          <button class="card-reply-btn" title="Reply to message">Reply</button>
+          <button class="card-reply-btn" title="Reply to message">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; vertical-align: middle;">
+              <polyline points="9 17 4 12 9 7"></polyline>
+              <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+            </svg>
+            Reply
+          </button>
           <div class="card-reply-box" hidden>
             <input type="text" class="card-reply-input" placeholder="Type a reply…" autocomplete="off" />
-            <button class="card-reply-send" title="Send reply">Send</button>
+            <button class="card-reply-send" title="Send reply" aria-label="Send reply">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
           </div>
         </div>
       ` : ""}
     </div>
-    <button class="card-dismiss" title="Dismiss">×</button>
+    <button class="card-dismiss" title="Dismiss" aria-label="Dismiss">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
   `;
 
   // Click anywhere on card → mark read (dismiss button is pointer-events:none when hidden)
   article.addEventListener("click", e => {
-    if (e.target.closest(".card-reply-container") || e.target.matches(".card-dismiss")) return;
+    if (e.target.closest(".card-reply-container") || e.target.closest(".card-dismiss")) return;
     markRead(n.id, article);
     if (meta.url) {
       window.open(meta.url, "_blank");
@@ -297,7 +358,18 @@ function createCard(n, index) {
 
       replyInput.disabled = true;
       replySend.disabled = true;
-      replySend.textContent = "Sending…";
+      replySend.innerHTML = `
+        <svg width="12" height="12" class="spin-loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="2" x2="12" y2="6"></line>
+          <line x1="12" y1="18" x2="12" y2="22"></line>
+          <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+          <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+          <line x1="2" y1="12" x2="6" y2="12"></line>
+          <line x1="18" y1="12" x2="22" y2="12"></line>
+          <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+          <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+        </svg>
+      `;
 
       // Send to background service worker
       chrome.runtime.sendMessage({
@@ -310,7 +382,12 @@ function createCard(n, index) {
       replyInput.value = "";
       replyInput.disabled = false;
       replySend.disabled = false;
-      replySend.textContent = "Send";
+      replySend.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      `;
       replyBox.hidden = true;
       replyBtn.style.display = "inline-flex";
 
@@ -558,7 +635,7 @@ chrome.runtime.onMessage.addListener(message => {
     if (ipsGroup && ipsList) {
       if (message.ips && message.ips.length > 0) {
         ipsList.innerHTML = message.ips.map(item => `
-          <div class="ip-item">
+          <div class="ip-item" title="Click to use this IP">
             <span class="ip-address">${item.ip}</span>
             <span class="ip-name">${item.name}</span>
           </div>
@@ -579,8 +656,56 @@ chrome.runtime.onMessage.addListener(message => {
   const result = await chrome.storage.local.get({ notifications: [], wsConnected: false, phoneConnected: false });
   notifications = result.notifications || [];
 
+  // Seed mock notifications if we are in a standard browser environment and there's no data
+  if (window.isMockChrome && notifications.length === 0) {
+    const now = Date.now();
+    notifications = [
+      {
+        id: "mock-1",
+        package: "com.whatsapp",
+        app: "WhatsApp",
+        title: "Jane Doe",
+        message: "Hey! Are we still meeting for lunch at 1 PM today? Let me know!",
+        timestamp: now - 120000, // 2m ago
+        unread: true,
+        replyable: true
+      },
+      {
+        id: "mock-2",
+        package: "com.google.android.gm",
+        app: "Gmail",
+        title: "Google Workspace Team",
+        message: "Welcome to your new collaboration suite. Here are the next steps to set up your inbox.",
+        timestamp: now - 900000, // 15m ago
+        unread: true,
+        replyable: false
+      },
+      {
+        id: "mock-3",
+        package: "com.spotify.music",
+        app: "Spotify",
+        title: "Now Playing",
+        message: "Blinding Lights by The Weeknd",
+        timestamp: now - 2700000, // 45m ago
+        unread: false,
+        replyable: false
+      },
+      {
+        id: "mock-4",
+        package: "com.discord",
+        app: "Discord",
+        title: "#general - TechTalk",
+        message: "Alex: The new chromium sidepanel layout looks sick!",
+        timestamp: now - 10800000, // 3h ago
+        unread: false,
+        replyable: true
+      }
+    ];
+    await chrome.storage.local.set({ notifications: notifications });
+  }
+
   // Set initial WS status indicator
-  setWsStatus(result.wsConnected === true, result.phoneConnected === true);
+  setWsStatus(result.wsConnected === true || window.isMockChrome, result.phoneConnected === true || window.isMockChrome);
 
   buildFilterPills();
   renderNotifications();
@@ -596,6 +721,15 @@ async function openSettings() {
     token: "",
     serverIps: []
   });
+  
+  let ips = result.serverIps || [];
+  if (window.isMockChrome && ips.length === 0) {
+    ips = [
+      { ip: "192.168.1.42", name: "Wi-Fi (wlan0)" },
+      { ip: "10.0.0.12", name: "Ethernet (eth0)" }
+    ];
+  }
+
   settingsUrl.value = result.serverUrl;
   settingsToken.value = result.token;
 
@@ -603,9 +737,9 @@ async function openSettings() {
   const ipsGroup = document.getElementById("settings-ips-group");
   const ipsList = document.getElementById("settings-ips-list");
   if (ipsGroup && ipsList) {
-    if (result.serverIps && result.serverIps.length > 0) {
-      ipsList.innerHTML = result.serverIps.map(item => `
-        <div class="ip-item">
+    if (ips.length > 0) {
+      ipsList.innerHTML = ips.map(item => `
+        <div class="ip-item" title="Click to use this IP">
           <span class="ip-address">${item.ip}</span>
           <span class="ip-name">${item.name}</span>
         </div>
@@ -644,6 +778,24 @@ settingsSave.addEventListener("click", saveSettings);
 settingsPanel.addEventListener("click", e => {
   if (e.target === settingsPanel) closeSettings();
 });
+
+// Click listener to select local IP and populate input
+if (ipsList) {
+  ipsList.addEventListener("click", e => {
+    const item = e.target.closest(".ip-item");
+    if (item) {
+      const ip = item.querySelector(".ip-address").textContent.trim();
+      settingsUrl.value = `ws://${ip}:8080`;
+      
+      // Visual feedback: focus input and highlight it
+      settingsUrl.focus();
+      settingsUrl.classList.add("highlight-flash");
+      setTimeout(() => {
+        settingsUrl.classList.remove("highlight-flash");
+      }, 800);
+    }
+  });
+}
 
 // ─── 12. Utility ─────────────────────────────────────────────────────────────
 
