@@ -552,6 +552,23 @@ chrome.runtime.onMessage.addListener(message => {
       renderNotifications();
     }
   }
+  if (message.type === "SERVER_IPS") {
+    const ipsGroup = document.getElementById("settings-ips-group");
+    const ipsList = document.getElementById("settings-ips-list");
+    if (ipsGroup && ipsList) {
+      if (message.ips && message.ips.length > 0) {
+        ipsList.innerHTML = message.ips.map(item => `
+          <div class="ip-item">
+            <span class="ip-address">${item.ip}</span>
+            <span class="ip-name">${item.name}</span>
+          </div>
+        `).join('');
+        ipsGroup.style.display = "flex";
+      } else {
+        ipsGroup.style.display = "none";
+      }
+    }
+  }
   return false;
 });
 
@@ -576,10 +593,29 @@ chrome.runtime.onMessage.addListener(message => {
 async function openSettings() {
   const result = await chrome.storage.local.get({
     serverUrl: "ws://localhost:8080",
-    token: ""
+    token: "",
+    serverIps: []
   });
   settingsUrl.value = result.serverUrl;
   settingsToken.value = result.token;
+
+  // Render laptop IPs
+  const ipsGroup = document.getElementById("settings-ips-group");
+  const ipsList = document.getElementById("settings-ips-list");
+  if (ipsGroup && ipsList) {
+    if (result.serverIps && result.serverIps.length > 0) {
+      ipsList.innerHTML = result.serverIps.map(item => `
+        <div class="ip-item">
+          <span class="ip-address">${item.ip}</span>
+          <span class="ip-name">${item.name}</span>
+        </div>
+      `).join('');
+      ipsGroup.style.display = "flex";
+    } else {
+      ipsGroup.style.display = "none";
+    }
+  }
+
   settingsPanel.hidden = false;
 }
 

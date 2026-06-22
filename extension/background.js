@@ -136,7 +136,7 @@ async function connectWebSocket() {
   ws.onopen = () => {
     console.log("[Phone Notify] Connected to relay server ✓");
     chrome.storage.local.set({ wsConnected: true });
-    chrome.runtime.sendMessage({ type: "WS_STATUS", connected: true }).catch(() => {});
+    chrome.runtime.sendMessage({ type: "WS_STATUS", connected: true }).catch(() => { });
   };
 
   ws.onmessage = async (event) => {
@@ -151,7 +151,7 @@ async function connectWebSocket() {
       // ── Handle phone status ───────────────────────────────────────────────
       if (data.type === "phone_status") {
         await chrome.storage.local.set({ phoneConnected: data.connected });
-        chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: data.connected }).catch(() => {});
+        chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: data.connected }).catch(() => { });
         return;
       }
 
@@ -169,10 +169,10 @@ async function connectWebSocket() {
               receivedAt: Date.now(),
               unread: true,
               timestamp: rawNotif.timestamp || Date.now(),
-              app:     rawNotif.app     || "Unknown",
-              title:   rawNotif.title   || "",
+              app: rawNotif.app || "Unknown",
+              title: rawNotif.title || "",
               message: rawNotif.message || "",
-              sender:  rawNotif.title   || rawNotif.app || "Unknown",
+              sender: rawNotif.title || rawNotif.app || "Unknown",
             };
             stored.unshift(notif);
             changed = true;
@@ -183,7 +183,7 @@ async function connectWebSocket() {
           stored.sort((a, b) => b.timestamp - a.timestamp);
           if (stored.length > 200) stored.length = 200;
           await chrome.storage.local.set({ notifications: stored });
-          chrome.runtime.sendMessage({ type: "HISTORY_RECEIVED" }).catch(() => {});
+          chrome.runtime.sendMessage({ type: "HISTORY_RECEIVED" }).catch(() => { });
         }
         return;
       }
@@ -204,7 +204,7 @@ async function connectWebSocket() {
 
         if (stored.length !== initialLength) {
           await chrome.storage.local.set({ notifications: stored });
-          chrome.runtime.sendMessage({ type: "NOTIFICATION_REMOVED", key: key, package: pkg }).catch(() => {});
+          chrome.runtime.sendMessage({ type: "NOTIFICATION_REMOVED", key: key, package: pkg }).catch(() => { });
         }
         return;
       }
@@ -218,10 +218,10 @@ async function connectWebSocket() {
         // Normalise the timestamp field — server sends Unix ms
         timestamp: data.timestamp || Date.now(),
         // Ensure display fields exist
-        app:     data.app     || "Unknown",
-        title:   data.title   || "",
+        app: data.app || "Unknown",
+        title: data.title || "",
         message: data.message || "",
-        sender:  data.title   || data.app || "Unknown",  // sidepanel uses 'sender'
+        sender: data.title || data.app || "Unknown",  // sidepanel uses 'sender'
       };
 
       // ── Persist to storage ────────────────────────────────────────────────
@@ -253,7 +253,7 @@ async function connectWebSocket() {
       // suppresses the "Receiving end does not exist" error that fires
       // when the panel is closed — that is expected and harmless.
       chrome.runtime.sendMessage({ type: "NEW_NOTIFICATION", payload: notif })
-        .catch(() => {});
+        .catch(() => { });
 
     } catch (err) {
       console.error("[Phone Notify] Message parse error:", err);
@@ -264,8 +264,8 @@ async function connectWebSocket() {
     console.log("[Phone Notify] Disconnected. Scheduling reconnect in ~3s...");
     ws = null;
     chrome.storage.local.set({ wsConnected: false, phoneConnected: false });
-    chrome.runtime.sendMessage({ type: "WS_STATUS", connected: false }).catch(() => {});
-    chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: false }).catch(() => {});
+    chrome.runtime.sendMessage({ type: "WS_STATUS", connected: false }).catch(() => { });
+    chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: false }).catch(() => { });
     chrome.alarms.create("ws-reconnect", { delayInMinutes: 0.05 });
   };
 
@@ -283,11 +283,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       ws.onclose = null; // Detach to avoid double triggers
       try {
         ws.close();
-      } catch (e) {}
+      } catch (e) { }
       ws = null;
       chrome.storage.local.set({ wsConnected: false, phoneConnected: false });
-      chrome.runtime.sendMessage({ type: "WS_STATUS", connected: false }).catch(() => {});
-      chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: false }).catch(() => {});
+      chrome.runtime.sendMessage({ type: "WS_STATUS", connected: false }).catch(() => { });
+      chrome.runtime.sendMessage({ type: "PHONE_STATUS", connected: false }).catch(() => { });
     }
     connectWebSocket();
   }
@@ -320,7 +320,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
     notif.unread = false;
     await chrome.storage.local.set({ notifications: stored });
     // Notify sidepanel to refresh
-    chrome.runtime.sendMessage({ type: "HISTORY_RECEIVED" }).catch(() => {});
+    chrome.runtime.sendMessage({ type: "HISTORY_RECEIVED" }).catch(() => { });
 
     // Open corresponding URL if mapping exists
     const appKey = notif.package || notif.app || "";

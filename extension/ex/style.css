@@ -644,4 +644,38 @@ body {
   cursor: not-allowed;
 }
 
+/* ─── 24. IPs List Styling ─── */
+.ips-list {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.ip-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.ip-address {
+  user-select: all;
+  color: var(--text-1);
+}
+
+.ip-name {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--border);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 

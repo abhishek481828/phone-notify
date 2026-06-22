@@ -32,9 +32,9 @@
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 const { WebSocketServer, WebSocket } = require("ws");
-const { createServer }               = require("http");
-const { URL }                        = require("url");
-const readline                       = require("readline");
+const { createServer } = require("http");
+const { URL } = require("url");
+const readline = require("readline");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -82,14 +82,14 @@ const CONFIG = {
  *   debug (gray)   — verbose payload dumps (CONFIG.DEBUG only)
  */
 const ANSI = {
-  reset:  "\x1b[0m",
-  bold:   "\x1b[1m",
-  gray:   "\x1b[90m",
-  green:  "\x1b[32m",
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  gray: "\x1b[90m",
+  green: "\x1b[32m",
   yellow: "\x1b[33m",
-  red:    "\x1b[31m",
-  cyan:   "\x1b[36m",
-  white:  "\x1b[37m",
+  red: "\x1b[31m",
+  cyan: "\x1b[36m",
+  white: "\x1b[37m",
 };
 
 function timestamp() {
@@ -97,9 +97,9 @@ function timestamp() {
 }
 
 const log = {
-  info:  (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.white}ℹ${ANSI.reset}`, ...args),
-  ok:    (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.green}✓${ANSI.reset}`, ...args),
-  warn:  (...args) => console.warn(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.yellow}⚠${ANSI.reset}`, ...args),
+  info: (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.white}ℹ${ANSI.reset}`, ...args),
+  ok: (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.green}✓${ANSI.reset}`, ...args),
+  warn: (...args) => console.warn(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.yellow}⚠${ANSI.reset}`, ...args),
   error: (...args) => console.error(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.red}✗${ANSI.reset}`, ...args),
   debug: (...args) => { if (CONFIG.DEBUG) console.log(`${ANSI.gray}[${timestamp()}] ◦`, ...args, ANSI.reset); },
   divider: () => console.log(`${ANSI.gray}${"─".repeat(72)}${ANSI.reset}`),
@@ -112,7 +112,7 @@ const log = {
  * Keeping them separate lets us broadcast to extensions without an O(n)
  * type-check on every message and makes the stats output trivial.
  */
-const phones     = new Set(); // Android app connections
+const phones = new Set(); // Android app connections
 const extensions = new Set(); // Chrome extension connections
 
 // Cache the last 50 notifications to prevent loss during Extension suspensions
@@ -164,7 +164,7 @@ wss.on("connection", (ws, req) => {
    */
   const requestUrl = new URL(req.url ?? "/", `ws://localhost:${CONFIG.PORT}`);
   const clientType = requestUrl.searchParams.get("type"); // "phone" | "extension" | null
-  const clientIp   = req.socket.remoteAddress ?? "unknown";
+  const clientIp = req.socket.remoteAddress ?? "unknown";
 
   // ── 1.5. Validate Token if configured ─────────────────────────────────────
   const clientToken = requestUrl.searchParams.get("token");
@@ -187,7 +187,7 @@ wss.on("connection", (ws, req) => {
         log.info(`Deduplicating PHONE connection from ${clientIp} — closing old socket.`);
         try {
           oldPhone.close(1000, "Superceded by new connection");
-        } catch (e) {}
+        } catch (e) { }
         phones.delete(oldPhone);
       }
     }
@@ -545,43 +545,43 @@ heartbeatInterval.unref();
 /** Test notification templates keyed by short name. */
 const TEST_NOTIFICATIONS = {
   whatsapp: {
-    type:      "notification",
-    app:       "WhatsApp",
-    package:   "com.whatsapp",
-    title:     "Alex Rivera",
-    message:   "Hey! Are you coming to the meetup tonight? 🎉",
+    type: "notification",
+    app: "WhatsApp",
+    package: "com.whatsapp",
+    title: "Alex Rivera",
+    message: "Hey! Are you coming to the meetup tonight? 🎉",
     timestamp: Date.now(),
   },
   telegram: {
-    type:      "notification",
-    app:       "Telegram",
-    package:   "org.telegram.messenger",
-    title:     "Design Hub",
-    message:   "🔥 New Figma plugin just dropped — check the pinned message!",
+    type: "notification",
+    app: "Telegram",
+    package: "org.telegram.messenger",
+    title: "Design Hub",
+    message: "🔥 New Figma plugin just dropped — check the pinned message!",
     timestamp: Date.now(),
   },
   gmail: {
-    type:      "notification",
-    app:       "Gmail",
-    package:   "com.google.android.gm",
-    title:     "GitHub",
-    message:   "Your pull request #42 'feat: dark mode' was merged into main ✅",
+    type: "notification",
+    app: "Gmail",
+    package: "com.google.android.gm",
+    title: "GitHub",
+    message: "Your pull request #42 'feat: dark mode' was merged into main ✅",
     timestamp: Date.now(),
   },
   instagram: {
-    type:      "notification",
-    app:       "Instagram",
-    package:   "com.instagram.android",
-    title:     "Jordan Lee",
-    message:   "Liked your photo: 'Golden hour at the coast 🌅'",
+    type: "notification",
+    app: "Instagram",
+    package: "com.instagram.android",
+    title: "Jordan Lee",
+    message: "Liked your photo: 'Golden hour at the coast 🌅'",
     timestamp: Date.now(),
   },
   discord: {
-    type:      "notification",
-    app:       "Discord",
-    package:   "com.discord",
-    title:     "dev-general",
-    message:   "neon: anyone tried the new Bun 1.2 release? insanely fast 🚀",
+    type: "notification",
+    app: "Discord",
+    package: "com.discord",
+    title: "dev-general",
+    message: "neon: anyone tried the new Bun 1.2 release? insanely fast 🚀",
     timestamp: Date.now(),
   },
 };
@@ -605,8 +605,8 @@ ${ANSI.cyan}Phone Notify Server — Interactive Commands${ANSI.reset}
 // Only attach stdin handler when running interactively (not piped).
 if (process.stdin.isTTY) {
   const rl = readline.createInterface({
-    input:    process.stdin,
-    output:   process.stdout,
+    input: process.stdin,
+    output: process.stdout,
     terminal: false,
   });
 
@@ -614,9 +614,9 @@ if (process.stdin.isTTY) {
   process.stdout.write(`${ANSI.gray}Type "help" for available commands.\n${ANSI.reset}`);
 
   rl.on("line", (line) => {
-    const parts   = line.trim().toLowerCase().split(/\s+/);
+    const parts = line.trim().toLowerCase().split(/\s+/);
     const command = parts[0];
-    const arg     = parts[1] ?? "whatsapp";
+    const arg = parts[1] ?? "whatsapp";
 
     switch (command) {
 
@@ -699,7 +699,7 @@ function shutdown(reason) {
   }, 5_000).unref();
 }
 
-process.on("SIGINT",  () => shutdown("SIGINT (Ctrl+C)"));
+process.on("SIGINT", () => shutdown("SIGINT (Ctrl+C)"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 // Catch unhandled promise rejections to prevent silent crashes
