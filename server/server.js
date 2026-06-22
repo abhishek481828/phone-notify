@@ -32,9 +32,10 @@
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 const { WebSocketServer, WebSocket } = require("ws");
-const { createServer }               = require("http");
-const { URL }                        = require("url");
-const readline                       = require("readline");
+const { createServer } = require("http");
+const { URL } = require("url");
+const readline = require("readline");
+const os = require("os");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -121,6 +122,19 @@ const notificationHistory = [];
 /** Returns a snapshot of current connection counts for logging. */
 function stats() {
   return `📱 ${phones.size} phone(s)  🖥  ${extensions.size} extension(s)`;
+}
+
+function getNetworkIps() {
+  const interfaces = os.networkInterfaces();
+  const ips = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name]) {
+      if (net.family === "IPv4" && !net.internal) {
+        ips.push({ ip: net.address, name: name });
+      }
+    }
+  }
+  return ips;
 }
 
 function broadcastPhoneStatus() {
@@ -210,6 +224,12 @@ wss.on("connection", (ws, req) => {
     safeJsonSend(ws, {
       type: "phone_status",
       connected: phones.size > 0
+    });
+
+    // Send the laptop's network IPs to the extension
+    safeJsonSend(ws, {
+      type: "server_ips",
+      ips: getNetworkIps()
     });
 
     // Send history if we have any cached notifications
@@ -658,9 +678,16 @@ httpServer.listen(CONFIG.PORT, () => {
   console.log(`\n  ${ANSI.bold}${ANSI.green}Phone Notify Relay Server${ANSI.reset}\n`);
   console.log(`  ${ANSI.cyan}WebSocket${ANSI.reset}  ws://0.0.0.0:${CONFIG.PORT}`);
   console.log(`  ${ANSI.cyan}HTTP${ANSI.reset}       http://0.0.0.0:${CONFIG.PORT}  (status page)\n`);
-  console.log(`  ${ANSI.gray}Find your LAN IP:  ip addr show | grep "inet 192"${ANSI.reset}`);
-  console.log(`  ${ANSI.gray}Android app URL:   ws://<LAN-IP>:${CONFIG.PORT}?type=phone${ANSI.reset}`);
-  console.log(`  ${ANSI.gray}Extension URL:     ws://localhost:${CONFIG.PORT}?type=extension${ANSI.reset}\n`);
+  
+  console.log(`  ${ANSI.gray}Available URLs for Android App:${ANSI.reset}`);
+  const localIps = getNetworkIps();
+  localIps.forEach(item => {
+    console.log(`    ws://${item.ip}:${CONFIG.PORT}?type=phone (${item.name})`);
+  });
+  if (localIps.length === 0) {
+    console.log(`    ws://<LAN-IP>:${CONFIG.PORT}?type=phone`);
+  }
+  console.log(`\n  ${ANSI.gray}Extension URL:     ws://localhost:${CONFIG.PORT}?type=extension${ANSI.reset}\n`);
   log.divider();
   printHelp();
 });

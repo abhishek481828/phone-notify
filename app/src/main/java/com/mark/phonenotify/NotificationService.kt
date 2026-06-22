@@ -178,15 +178,20 @@ class NotificationService : NotificationListenerService() {
 
     // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-    /**
-     * Called by the Android OS when Notification Access is granted and the
-     * service is successfully bound. Good place for one-time initialisation.
-     */
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.i(TAG, "NotificationListenerService connected — capturing notifications.")
         contextRef = applicationContext
         instance = this
+
+        // Auto-connect to relay server using saved settings if not already connected
+        val settings = SettingsManager(this)
+        val ip = settings.ipAddress
+        val port = settings.port
+        if (ip.isNotEmpty() && !WebSocketManager.isConnected()) {
+            Log.i(TAG, "Auto-connecting to $ip:$port from NotificationService")
+            WebSocketManager.connect(ip, port)
+        }
     }
 
     /**
