@@ -355,7 +355,10 @@ object WebSocketManager {
                         val action = json.optString("action")
                         if (action.isNotBlank()) {
                             Log.i(TAG, "← media_control: $action")
-                            mainHandler.post { onMediaControl?.invoke(action) }
+                            mainHandler.post {
+                                NotificationService.handleMediaControl(action)
+                                onMediaControl?.invoke(action)
+                            }
                         }
                     }
 

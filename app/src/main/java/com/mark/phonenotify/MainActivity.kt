@@ -176,6 +176,10 @@ class MainActivity : AppCompatActivity() {
         settings = SettingsManager(this)
         setContentView(binding.root)
 
+        if (NotificationService.contextRef == null) {
+            NotificationService.contextRef = applicationContext
+        }
+
         restoreSavedSettings()
         setupUrlPreview()
         setupClickListeners()
@@ -216,6 +220,18 @@ class MainActivity : AppCompatActivity() {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.removePrimaryClipChangedListener(clipboardListener)
         } catch (_: Exception) {}
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        WebSocketManager.onStatusChanged = null
+        WebSocketManager.onNotificationSent = null
+        WebSocketManager.onCallAction = null
+        WebSocketManager.onMediaControl = null
+        WebSocketManager.onClipboardReceived = null
+        if (NotificationService.contextRef == applicationContext) {
+            NotificationService.contextRef = null
+        }
     }
 
     // ── Phone permission helpers ───────────────────────────────────────────────
@@ -368,7 +384,6 @@ class MainActivity : AppCompatActivity() {
 
         WebSocketManager.onMediaControl = { action ->
             Log.i(TAG, "media_control received: $action")
-            sendMediaKeyEvent(action)
         }
 
         WebSocketManager.onClipboardReceived = { text ->
@@ -565,44 +580,6 @@ class MainActivity : AppCompatActivity() {
         val target = ComponentName(this, NotificationService::class.java)
         return flat.split(":").any { entry ->
             ComponentName.unflattenFromString(entry) == target
-        }
-    }
-
-    // ── Media key dispatch ───────────────────────────────────────────────────────
-
-    /**
-     * Sends a hardware media key event to the active MediaSession via AudioManager.
-     * This is the same mechanism used by Bluetooth headphones / headset buttons —
-     * it works with any app that registers a MediaSession (Spotify, YouTube Music, etc.)
-     *
-     * @param action "play_pause" | "play" | "pause" | "next" | "prev"
-     */
-    private fun sendMediaKeyEvent(action: String) {
-        val keyCode = when (action.lowercase()) {
-            "play_pause", "play", "pause", "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-            "next"                                   -> KeyEvent.KEYCODE_MEDIA_NEXT
-            "prev", "previous"                       -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
-            "stop"                                   -> KeyEvent.KEYCODE_MEDIA_STOP
-            else -> {
-                Log.w(TAG, "Unknown media action: $action")
-                return
-            }
-        }
-
-        try {
-            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val now = SystemClock.uptimeMillis()
-
-            // Send KEY_DOWN then KEY_UP — same as a physical button press
-            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
-            // Slight delay so the media player registers the press before the release
-            Handler(Looper.getMainLooper()).postDelayed({
-                am.dispatchMediaKeyEvent(KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0))
-            }, 100)
-
-            Log.i(TAG, "Media key dispatched: $action → keyCode=$keyCode")
-        } catch (e: Exception) {
-            Log.e(TAG, "sendMediaKeyEvent failed: ${e.message}", e)
         }
     }
 

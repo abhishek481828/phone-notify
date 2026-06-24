@@ -188,6 +188,37 @@ class NotificationService : NotificationListenerService() {
             showClipboardNotification(ctx, text)
         }
 
+        fun handleMediaControl(action: String) {
+            val ctx = contextRef ?: run {
+                Log.w(TAG, "Cannot handle media control: contextRef is null")
+                return
+            }
+            val keyCode = when (action.lowercase()) {
+                "play_pause", "play", "pause", "toggle" -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                "next"                                   -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+                "prev", "previous"                       -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                "stop"                                   -> android.view.KeyEvent.KEYCODE_MEDIA_STOP
+                else -> {
+                    Log.w(TAG, "Unknown media action: $action")
+                    return
+                }
+            }
+
+            try {
+                val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                val now = android.os.SystemClock.uptimeMillis()
+
+                am.dispatchMediaKeyEvent(android.view.KeyEvent(now, now, android.view.KeyEvent.ACTION_DOWN, keyCode, 0))
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    am.dispatchMediaKeyEvent(android.view.KeyEvent(now, android.os.SystemClock.uptimeMillis(), android.view.KeyEvent.ACTION_UP, keyCode, 0))
+                }, 100)
+
+                Log.i(TAG, "Media key dispatched via service: $action → keyCode=$keyCode")
+            } catch (e: Exception) {
+                Log.e(TAG, "handleMediaControl failed: ${e.message}", e)
+            }
+        }
+
         // ── Static senders (called from MainActivity) ──────────────────────────
 
         /**
