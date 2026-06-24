@@ -1493,10 +1493,27 @@ if (ipsList) {
     await chrome.storage.local.set({ notifications });
   }
 
-  setWsStatus(
-    result.wsConnected    === true || !!window.isMockChrome,
-    result.phoneConnected === true || !!window.isMockChrome,
-  );
+  // Query background.js for the LIVE WebSocket state, not the (potentially stale) storage value.
+  // Storage only reflects the last persisted state, which may be 'false' even while the
+  // service worker is actively connected (e.g. the panel opened before the storage write flushed).
+  if (window.isMockChrome) {
+    // Dev preview: always show connected
+    setWsStatus(true, true);
+  } else {
+    try {
+      const liveStatus = await chrome.runtime.sendMessage({ type: "GET_WS_STATUS" });
+      setWsStatus(
+        liveStatus.wsConnected    === true,
+        liveStatus.phoneConnected === true,
+      );
+    } catch (_) {
+      // Background not ready yet — fall back to storage value
+      setWsStatus(
+        result.wsConnected    === true,
+        result.phoneConnected === true,
+      );
+    }
+  }
 
   buildFilterPills();
   renderNotifications(true); // animate on initial load only

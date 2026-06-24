@@ -510,6 +510,15 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
+  // Sidepanel queries live WS + phone status on open
+  if (message.type === "GET_WS_STATUS") {
+    const wsOpen = ws !== null && ws.readyState === WebSocket.OPEN;
+    chrome.storage.local.get({ phoneConnected: false }).then(r => {
+      sendResponse({ wsConnected: wsOpen, phoneConnected: r.phoneConnected });
+    });
+    return true; // keep message channel open for async sendResponse
+  }
+
   if (message.type === "RECONNECT_WS") {
     console.log("[Phone Notify] RECONNECT_WS — reconnecting");
     if (ws) {
