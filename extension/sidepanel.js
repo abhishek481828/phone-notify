@@ -965,6 +965,15 @@ function markAllRead() {
 }
 
 function dismissCard(id, cardEl) {
+  const notif = notifications.find(n => n.id === id);
+  const key = notif ? notif.key : id;
+
+  chrome.runtime.sendMessage({
+    type: "DISMISS_NOTIFICATION",
+    id: id,
+    key: key
+  }).catch(() => {});
+
   cardEl.classList.add("dismissing");
   cardEl.addEventListener("animationend", () => {
     notifications = notifications.filter(n => n.id !== id);
@@ -987,6 +996,10 @@ function clearAllNotifications() {
   buildFilterPills();
   renderNotifications(false);
   showToast("All notifications cleared", "info");
+
+  chrome.runtime.sendMessage({
+    type: "CLEAR_ALL_NOTIFICATIONS"
+  }).catch(() => {});
 
   // Reset confirm state
   clearConfirmPending = false;

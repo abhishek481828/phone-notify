@@ -343,6 +343,23 @@ object WebSocketManager {
                         }
                     }
 
+                    "dismiss" -> {
+                        val key = json.optString("key")
+                        if (key.isNotBlank()) {
+                            Log.i(TAG, "← dismiss notification: $key")
+                            mainHandler.post {
+                                NotificationService.dismissNotification(key)
+                            }
+                        }
+                    }
+
+                    "clear_all" -> {
+                        Log.i(TAG, "← clear all notifications")
+                        mainHandler.post {
+                            NotificationService.dismissAllNotifications()
+                        }
+                    }
+
                     "call_action" -> {
                         val action = json.optString("action")
                         if (action.isNotBlank()) {

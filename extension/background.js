@@ -537,6 +537,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendToPhone({ type: "reply", key: message.key, message: message.message });
   }
 
+  if (message.type === "DISMISS_NOTIFICATION") {
+    console.log("[Phone Notify] Dismissing notification:", message.id);
+    sendToPhone({ type: "dismiss", id: message.id, key: message.key });
+  }
+
+  if (message.type === "CLEAR_ALL_NOTIFICATIONS") {
+    console.log("[Phone Notify] Clearing all notifications");
+    sendToPhone({ type: "clear_all" });
+  }
+
   if (message.type === "SEND_CALL_ACTION") {
     sendToPhone({ type: "call_action", action: message.action });
   }

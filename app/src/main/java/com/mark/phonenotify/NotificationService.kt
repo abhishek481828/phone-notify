@@ -406,6 +406,50 @@ class NotificationService : NotificationListenerService() {
                 false
             }
         }
+
+        fun dismissNotification(key: String): Boolean {
+            Log.d(TAG, "dismissNotification: key=$key")
+            val service = instance ?: run {
+                Log.w(TAG, "Cannot dismiss notification: service instance is null")
+                return false
+            }
+
+            val cleanTargetKey = key.trim().replace("\\s".toRegex(), "")
+            var matchedSbnKey: String? = null
+            for ((cacheKey, _) in activeNotificationsMap) {
+                val cleanCacheKey = cacheKey.trim().replace("\\s".toRegex(), "")
+                if (cleanCacheKey == cleanTargetKey) {
+                    matchedSbnKey = cacheKey
+                    break
+                }
+            }
+
+            val targetKey = matchedSbnKey ?: key
+            return try {
+                service.cancelNotification(targetKey)
+                Log.i(TAG, "Successfully cancelled notification: $targetKey")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to cancel notification: ${e.message}", e)
+                false
+            }
+        }
+
+        fun dismissAllNotifications(): Boolean {
+            Log.d(TAG, "dismissAllNotifications")
+            val service = instance ?: run {
+                Log.w(TAG, "Cannot dismiss all notifications: service instance is null")
+                return false
+            }
+            return try {
+                service.cancelAllNotifications()
+                Log.i(TAG, "Successfully cancelled all notifications")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to cancel all notifications: ${e.message}", e)
+                false
+            }
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())

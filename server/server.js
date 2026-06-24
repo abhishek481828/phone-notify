@@ -703,6 +703,42 @@ function handleExtensionMessage(payload, senderIp) {
     return;
   }
 
+  if (type === "dismiss") {
+    log.ext(`DISMISS  key="${payload.key}"  id="${payload.id}"`);
+    const key = payload.key;
+    const id = payload.id;
+    
+    const cleanId = id ? cleanKey(id) : null;
+    const cleanKeyVal = key ? cleanKey(key) : null;
+    
+    const before = notificationHistory.length;
+    notificationHistory = notificationHistory.filter(n => {
+      const nKeyCleaned = n.key ? cleanKey(n.key) : null;
+      const nIdCleaned = n.id ? cleanKey(n.id) : null;
+      
+      if (cleanKeyVal && (nKeyCleaned === cleanKeyVal || nIdCleaned === cleanKeyVal)) {
+        return false;
+      }
+      if (cleanId && (nKeyCleaned === cleanId || nIdCleaned === cleanId)) {
+        return false;
+      }
+      return true;
+    });
+    if (notificationHistory.length !== before) scheduleHistoryWrite();
+
+    forwardToPhones(payload, senderIp, "dismiss");
+    broadcastToExtensions({ type: "notification_removed", key: payload.key, id: payload.id });
+    return;
+  }
+
+  if (type === "clear_all") {
+    log.ext(`CLEAR ALL`);
+    clearHistory();
+    forwardToPhones(payload, senderIp, "clear_all");
+    broadcastToExtensions({ type: "clear_all_notifications", timestamp: Date.now() });
+    return;
+  }
+
   log.warn(`Extension sent unknown message type "${type}" from ${senderIp} — ignored.`);
 }
 
