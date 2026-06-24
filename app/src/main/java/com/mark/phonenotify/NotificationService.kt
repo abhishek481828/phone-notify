@@ -194,7 +194,9 @@ class NotificationService : NotificationListenerService() {
                 return
             }
             val keyCode = when (action.lowercase()) {
-                "play_pause", "play", "pause", "toggle" -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                "play"                                   -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY
+                "pause"                                  -> android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
+                "play_pause", "toggle"                   -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
                 "next"                                   -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
                 "prev", "previous"                       -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
                 "stop"                                   -> android.view.KeyEvent.KEYCODE_MEDIA_STOP

@@ -387,7 +387,7 @@ const MEDIA_APP_ICONS = {
   // fallback for any other
 };
 
-let mediaIsPlaying = false; // track last known play/pause state
+let mediaIsPlaying = true; // track last known play/pause state
 
 /**
  * Show and update the media bar with current track info.
