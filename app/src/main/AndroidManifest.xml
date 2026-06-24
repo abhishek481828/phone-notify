@@ -1,27 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    AndroidManifest.xml — Phone Notify v2
+    AndroidManifest.xml — Phone Notify v3
     ────────────────────────────────────────
-    Key changes from v1:
-      • FOREGROUND_SERVICE_DATA_SYNC for future persistent foreground service
-      • CHANGE_NETWORK_STATE for future Wi-Fi reconnect handling
-      • NotificationService has android:exported="true" (required for system binding)
+    v3 additions:
+      • READ_PHONE_STATE   — Detect incoming calls via TelephonyManager
+      • ANSWER_PHONE_CALLS — Accept a ringing call via TelecomManager (API 26+)
+      • CALL_PHONE         — End/reject a call via TelecomManager (API 26+)
+      • RECEIVE_BOOT_COMPLETED — Auto-reconnect after device reboot (future)
 
     Permission notes:
       INTERNET                         — Required by OkHttp for WebSocket
       FOREGROUND_SERVICE               — Required if we later run as a foreground service
       QUERY_ALL_PACKAGES               — Required to resolve app names via PackageManager
                                          (needed because target SDK 34 restricts package visibility)
+      READ_PHONE_STATE                 — Allows listening to call state (RINGING/OFFHOOK/IDLE)
+                                         Dangerous permission: requested at runtime in MainActivity
+      ANSWER_PHONE_CALLS               — Allows acceptRingingCall() (API 26+)
+                                         Dangerous permission: requested at runtime in MainActivity
+      CALL_PHONE                       — Allows endCall() to reject/end calls
+                                         Dangerous permission: requested at runtime in MainActivity
       BIND_NOTIFICATION_LISTENER_SERVICE — Applied to the service, not the app:
                                          This RESTRICTS who can bind (only the OS).
                                          It is NOT a <uses-permission> entry.
 
-    Notification Listener binding:
-      Android binds NotificationListenerService automatically when the user enables
-      Notification Access in Settings. The service MUST be declared with:
-        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-        <intent-filter> with action BIND_NOTIFICATION_LISTENER_SERVICE
-      Without both, the Settings toggle has no effect.
+    Call handling notes:
+      - TelecomManager.acceptRingingCall() is deprecated in API 29 but still functional.
+        The proper long-term solution is implementing an InCallService, which is
+        significantly more complex. This approach covers API 26–33 reliably.
+      - TelecomManager.endCall() is deprecated in API 28. For API 29+ rejection,
+        users should swipe the phone notification or a full InCallService is needed.
+        We attempt endCall() and log a warning if it fails.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -46,6 +54,27 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission"/>
+
+    <!--
+        READ_PHONE_STATE — detect call state changes (RINGING / OFF_HOOK / IDLE).
+        Required by TelephonyManager.listen() / registerTelephonyCallback().
+        This is a "dangerous" permission requested at runtime in MainActivity.
+    -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+
+    <!--
+        ANSWER_PHONE_CALLS — allows TelecomManager.acceptRingingCall() (API 26+).
+        Enables the "Answer" button in the extension to pick up incoming calls.
+        Dangerous permission — runtime request required.
+    -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS"/>
+
+    <!--
+        CALL_PHONE — allows TelecomManager.endCall() to reject/end a call.
+        Enables the "Reject" button in the extension.
+        Dangerous permission — runtime request required.
+    -->
+    <uses-permission android:name="android.permission.CALL_PHONE"/>
 
     <!-- ── Application ────────────────────────────────────────────────────── -->
 
@@ -89,11 +118,6 @@
               → Tells the OS that this service is a notification listener.
                 Without this filter, the Notification Access settings screen will
                 not show "Phone Notify" in its list, so users cannot grant access.
-
-            SettingsActivity reference in <meta-data>:
-              → Optional: tells the Settings screen to show a cog icon that opens
-                a settings activity. Not implemented in v1 but the placeholder
-                is here for future use.
         -->
         <service
             android:name=".NotificationService"

@@ -1,7 +1,12 @@
 <!DOCTYPE html>
 <!--
-  sidepanel.html — Phone Notify Side Panel
+  sidepanel.html — Phone Notify Side Panel v3
   Design: Premium dark glassmorphism, Linear × Arc Browser inspired.
+
+  Changes v3:
+   • Live incoming-call overlay card (#call-overlay) with pulsing ring,
+     caller ID, call timer, Answer / Reject / Silence buttons.
+   • Call card auto-shows on CALL_UPDATE(ringing), hides on CALL_ENDED.
 -->
 <html lang="en">
 
@@ -37,6 +42,9 @@
           <span class="ws-label" id="ws-label">Live</span>
         </div>
         <span class="badge" id="notif-count" title="Unread notifications">0</span>
+
+
+
         <button class="icon-btn" id="settings-btn" title="Server Settings" aria-label="Settings">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -45,21 +53,26 @@
               d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
-        <button class="icon-btn" id="clear-btn" title="Clear all notifications" aria-label="Clear all">
+
+        <button class="clear-all-btn" id="clear-btn" title="Clear all notifications" aria-label="Clear all">
+          Clear all
+        </button>
+
+        <!-- Clipboard send-to-phone button -->
+        <button class="icon-btn" id="clipboard-btn" title="Send browser clipboard to phone" aria-label="Send clipboard">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14H6L5 6" />
-            <path d="M10 11v6" />
-            <path d="M14 11v6" />
-            <path d="M9 6V4h6v2" />
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            <line x1="17" y1="13" x2="17" y2="17"/>
+            <line x1="15" y1="15" x2="19" y2="15"/>
           </svg>
         </button>
       </div>
     </header>
 
     <!-- ── Search ── -->
-    <div class="search-wrapper">
+    <div class="search-wrapper" id="search-wrapper">
       <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
         stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8" />
@@ -74,6 +87,111 @@
       <!-- Injected by sidepanel.js -->
     </div>
 
+    <!--
+      ── Incoming Call Overlay ──────────────────────────────────────────────
+      Shown when Android reports state="ringing". Hidden at all other times.
+      Position: sticky below filter bar, above the notification list.
+      The pulsing rings (.call-ring-1/2/3) scale outward from the avatar.
+    -->
+    <div id="call-overlay" class="call-overlay" hidden aria-live="assertive" role="alertdialog"
+      aria-label="Incoming call">
+
+      <!-- Animated ring layers -->
+      <div class="call-rings" aria-hidden="true">
+        <span class="call-ring call-ring-1"></span>
+        <span class="call-ring call-ring-2"></span>
+        <span class="call-ring call-ring-3"></span>
+
+        <!-- Caller avatar / phone icon -->
+        <div class="call-avatar">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Caller info -->
+      <div class="call-info">
+        <span class="call-label">Incoming Call</span>
+        <span class="call-caller" id="call-caller">Unknown</span>
+        <span class="call-device" id="call-device"></span>
+        <span class="call-timer" id="call-timer" hidden>00:00</span>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="call-actions">
+        <button class="call-btn call-btn-silence" id="call-btn-silence" title="Silence ringtone" aria-label="Silence">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="1" y1="1" x2="23" y2="23"/>
+            <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+            <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <span>Silence</span>
+        </button>
+
+        <button class="call-btn call-btn-reject" id="call-btn-reject" title="Reject call" aria-label="Reject">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          <span>Reject</span>
+        </button>
+
+        <button class="call-btn call-btn-answer" id="call-btn-answer" title="Answer call" aria-label="Answer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.63 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.29 6.29l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          <span>Answer</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Media Control Bar ── -->
+    <!--
+      Visible only when the phone is playing media (type="media_status").
+      Shows track name + artist + playback controls.
+      Sits between the call overlay and the notification list.
+    -->
+    <div id="media-bar" class="media-bar" hidden aria-label="Media controls">
+      <!-- App / source icon (emoji injected by JS) -->
+      <div class="media-icon" id="media-icon" aria-hidden="true">🎵</div>
+
+      <!-- Track text -->
+      <div class="media-text">
+        <span class="media-title" id="media-title">Unknown Track</span>
+        <span class="media-artist" id="media-artist">Unknown Artist</span>
+      </div>
+
+      <!-- Playback controls -->
+      <div class="media-controls" role="group" aria-label="Playback controls">
+        <button class="media-btn" id="media-prev" title="Previous" aria-label="Previous">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="19 20 9 12 19 4 19 20"/>
+            <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <button class="media-btn media-btn-play" id="media-play-pause" title="Play / Pause" aria-label="Play/Pause">
+          <!-- Pause icon (shown when playing, toggles in JS) -->
+          <svg id="media-play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        </button>
+        <button class="media-btn" id="media-next" title="Next" aria-label="Next">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 4 15 12 5 20 5 4"/>
+            <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- ── Notification List ── -->
     <main id="notification-list" role="feed" aria-label="Notifications" aria-live="polite">
       <!-- Cards injected by sidepanel.js -->
@@ -81,9 +199,9 @@
 
     <!-- ── Empty State ── -->
     <div class="empty-state" id="empty-state" hidden>
-      <div class="empty-icon">🔕</div>
-      <p class="empty-title">No notifications yet</p>
-      <p class="empty-sub">Notifications from your Android phone<br>will appear here in real time.</p>
+      <div class="empty-icon" id="empty-icon">🔕</div>
+      <p class="empty-title" id="empty-title">No notifications yet</p>
+      <p class="empty-sub" id="empty-sub">Notifications from your Android phone<br>will appear here in real time.</p>
     </div>
 
     <!-- ── Settings Panel ── -->
@@ -106,24 +224,88 @@
           <span class="settings-hint">Matches server's TOKEN env variable. Required for public servers.</span>
         </div>
 
+        <!-- ── Do Not Disturb ─────────────────────────────────────────────── -->
+        <div class="settings-group settings-group-dnd">
+          <div class="dnd-row">
+            <div class="dnd-label-col">
+              <span class="dnd-label">Do Not Disturb</span>
+              <span class="dnd-hint">Silence all alerts during quiet hours</span>
+            </div>
+            <label class="toggle-switch" for="dnd-toggle" aria-label="Enable Do Not Disturb">
+              <input type="checkbox" id="dnd-toggle" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <!-- Time range — shown only when DND is on -->
+          <div class="dnd-times" id="dnd-times" hidden>
+            <div class="dnd-time-row">
+              <label for="dnd-start">From</label>
+              <input type="time" id="dnd-start" class="settings-input time-input" value="23:00" />
+              <label for="dnd-end">To</label>
+              <input type="time" id="dnd-end" class="settings-input time-input" value="07:00" />
+            </div>
+            <span class="settings-hint">Calls still show the overlay but play no sound.</span>
+          </div>
+        </div>
+
         <div class="settings-group" id="settings-ips-group" style="display: none;">
           <label>Available Laptop IPs</label>
           <div class="ips-list" id="settings-ips-list"></div>
-          <span class="settings-hint">Click an IP to connect directly.</span>
+          <span class="settings-hint">Click an IP to auto-fill the URL.</span>
         </div>
 
         <div class="settings-actions">
           <button class="settings-btn-action secondary" id="settings-cancel">Cancel</button>
-          <button class="settings-btn-action primary" id="settings-save">Save & Connect</button>
+          <button class="settings-btn-action primary" id="settings-save">Save &amp; Connect</button>
         </div>
       </div>
     </div>
 
     <!-- ── Footer ── -->
+    <!--
+      Left side: live dot + connection status text
+      Right side: battery widget (hidden until phone connects)
+    -->
     <footer class="footer">
       <span class="footer-live-dot" id="footer-dot"></span>
       <span id="footer-text">Waiting for phone…</span>
+
+      <!-- Battery widget — shown once first battery report arrives -->
+      <div class="battery-widget" id="battery-widget" hidden>
+        <!-- Bolt icon (only visible when charging) -->
+        <svg class="battery-bolt" id="battery-bolt" width="9" height="9" viewBox="0 0 24 24"
+          fill="#f59e0b" hidden aria-hidden="true">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+        <!-- Battery shell -->
+        <div class="battery-shell" aria-hidden="true">
+          <div class="battery-fill" id="battery-fill"></div>
+          <div class="battery-nub"></div>
+        </div>
+        <span class="battery-pct" id="battery-pct">100%</span>
+      </div>
     </footer>
+
+    <!-- ── Toast Container ── -->
+    <!-- Position: fixed above footer, rendered last so it's on top of everything -->
+    <div id="toast-container" role="status" aria-live="polite"></div>
+
+    <!-- ── Right-click Context Menu ── -->
+    <div id="context-menu" class="context-menu" hidden>
+      <button class="ctx-item" id="ctx-copy">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy text
+      </button>
+      <button class="ctx-item" id="ctx-mute">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        Mute this app
+      </button>
+      <button class="ctx-item" id="ctx-open">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open web app
+      </button>
+    </div>
 
   </div>
 

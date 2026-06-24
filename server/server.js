@@ -1,5 +1,5 @@
 /**
- * server.js — Phone Notify WebSocket Relay Server
+ * server.js — Phone Notify WebSocket Relay Server v3
  * ═══════════════════════════════════════════════════════════════════════════════
  *
  * ROLE:  Acts as a relay hub between an Android phone and one or more Chrome
@@ -13,16 +13,44 @@
  *     ws://HOST:PORT?type=phone      → Android app
  *     ws://HOST:PORT?type=extension  → Chrome extension background.js
  *
- * HEARTBEAT:
- *   The server pings every connected client every HEARTBEAT_INTERVAL ms.
- *   If a client does not respond with a pong within that window, it is
- *   considered dead and its socket is terminated. This catches silent
- *   disconnects (e.g. phone screen off, Wi-Fi switched, app killed).
+ * MESSAGE TYPES (Phone → Server → Extension):
+ *   notification         — new notification from phone
+ *   notification_removed — notification dismissed on phone
+ *   battery              — phone battery level + charging state
+ *   clipboard            — phone clipboard text changed
+ *   media_status         — currently playing media info
+ *   call                 — incoming / active / ended call info
+ *   ping                 — keep-alive (consumed by server, not relayed)
  *
- * TEST COMMAND (interactive):
- *   While the server is running, type  test  in the terminal and press Enter.
- *   The server will fabricate a WhatsApp notification and broadcast it to all
- *   connected extension clients — useful for development without a real phone.
+ * MESSAGE TYPES (Extension → Server → Phone):
+ *   reply                — quick reply text for a notification
+ *   call_action          — answer / reject / silence a call
+ *   media_control        — play / pause / next / prev
+ *   clipboard_to_phone   — push text to phone clipboard
+ *
+ * HISTORY PERSISTENCE:
+ *   Notifications are cached in memory AND written to history.json so the
+ *   cache survives server restarts. Writes are debounced (2 s) to avoid
+ *   hammering the disk on bursts.
+ *
+ * WEBHOOK:
+ *   If WEBHOOK_URL env var is set, every incoming notification is HTTP-POSTed
+ *   (fire-and-forget) to that URL as JSON. Uses native fetch (Node ≥ 18).
+ *
+ * HEARTBEAT:
+ *   Server pings every client every HEARTBEAT_INTERVAL ms. Non-responsive
+ *   clients are terminated (catches silent disconnects).
+ *
+ * TERMINAL COMMANDS (while running interactively):
+ *   test [app]    — send fake notification  (whatsapp/telegram/gmail/instagram/discord)
+ *   call          — send fake incoming call notification
+ *   battery       — send fake battery status
+ *   media         — send fake media status
+ *   stats         — show connection counts
+ *   history [n]   — print last N cached notifications (default 5)
+ *   clear         — clear notification history cache + history.json
+ *   webhook [url] — set or clear the webhook URL at runtime
+ *   help          — show this list
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  */
@@ -32,10 +60,12 @@
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 const { WebSocketServer, WebSocket } = require("ws");
-const { createServer } = require("http");
-const { URL } = require("url");
-const readline = require("readline");
-const os = require("os");
+const { createServer }               = require("http");
+const { URL }                        = require("url");
+const readline                       = require("readline");
+const os                             = require("os");
+const fs                             = require("fs");
+const path                           = require("path");
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
@@ -43,45 +73,40 @@ const CONFIG = {
   /** Port the WebSocket server listens on. Override with PORT env var. */
   PORT: parseInt(process.env.PORT ?? "8080", 10),
 
-  /**
-   * How often (ms) to send a ping to every connected client.
-   * Clients that don't pong within this window are disconnected.
-   */
+  /** How often (ms) to ping every connected client. */
   HEARTBEAT_INTERVAL: 30_000,
 
-  /**
-   * If true, full JSON payloads are logged to the console.
-   * Set DEBUG=true in the environment to enable.
-   */
+  /** Full JSON payload logging. Set DEBUG=true to enable. */
   DEBUG: process.env.DEBUG === "true",
 
   /**
    * Maximum notification payload size (bytes).
-   * Prevents memory abuse from malformed giant messages.
+   * Increased from 16 KB → 64 KB to support long Gmail bodies.
    */
-  MAX_PAYLOAD_BYTES: 16_384, // 16 KB
+  MAX_PAYLOAD_BYTES: 65_536, // 64 KB
+
+  /** Secret token for authentication. Set TOKEN env var to require it. */
+  TOKEN: process.env.TOKEN || null,
+
+  /** Max notifications kept in the in-memory + file history. */
+  HISTORY_SIZE: 100,
+
+  /** Path to the persistent history file (same directory as server.js). */
+  HISTORY_FILE: path.join(__dirname, "history.json"),
 
   /**
-   * Secret token to authenticate connections.
-   * If set, clients must connect with ?token=YOUR_TOKEN
+   * Optional webhook URL. Every incoming notification is POST-ed here.
+   * Set WEBHOOK_URL env var or use the `webhook` terminal command at runtime.
+   * Uses native fetch (Node ≥ 18) — no extra dependencies.
    */
-  TOKEN: process.env.TOKEN || null,
+  WEBHOOK_URL: process.env.WEBHOOK_URL || null,
+
+  /** HTTP timeout (ms) for webhook POST requests. */
+  WEBHOOK_TIMEOUT_MS: 5_000,
 };
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
-/**
- * Minimal structured logger with ANSI colours and ISO timestamps.
- * Every log line is prefixed with the current UTC time so server logs
- * are easy to correlate with device-side logs.
- *
- * Levels:
- *   info  (white)  — normal operations
- *   ok    (green)  — successful events
- *   warn  (yellow) — non-fatal issues (invalid JSON, unexpected messages)
- *   error (red)    — errors that need attention
- *   debug (gray)   — verbose payload dumps (CONFIG.DEBUG only)
- */
 const ANSI = {
   reset:  "\x1b[0m",
   bold:   "\x1b[1m",
@@ -90,6 +115,8 @@ const ANSI = {
   yellow: "\x1b[33m",
   red:    "\x1b[31m",
   cyan:   "\x1b[36m",
+  blue:   "\x1b[34m",
+  magenta:"\x1b[35m",
   white:  "\x1b[37m",
 };
 
@@ -98,26 +125,23 @@ function timestamp() {
 }
 
 const log = {
-  info:  (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.white}ℹ${ANSI.reset}`, ...args),
-  ok:    (...args) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.green}✓${ANSI.reset}`, ...args),
-  warn:  (...args) => console.warn(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.yellow}⚠${ANSI.reset}`, ...args),
-  error: (...args) => console.error(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.red}✗${ANSI.reset}`, ...args),
-  debug: (...args) => { if (CONFIG.DEBUG) console.log(`${ANSI.gray}[${timestamp()}] ◦`, ...args, ANSI.reset); },
-  divider: () => console.log(`${ANSI.gray}${"─".repeat(72)}${ANSI.reset}`),
+  info:    (...a) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.white}ℹ${ANSI.reset}`, ...a),
+  ok:      (...a) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.green}✓${ANSI.reset}`, ...a),
+  warn:    (...a) => console.warn(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.yellow}⚠${ANSI.reset}`, ...a),
+  error:   (...a) => console.error(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.red}✗${ANSI.reset}`, ...a),
+  debug:   (...a) => { if (CONFIG.DEBUG) console.log(`${ANSI.gray}[${timestamp()}] ◦`, ...a, ANSI.reset); },
+  phone:   (...a) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.cyan}📱${ANSI.reset}`, ...a),
+  ext:     (...a) => console.log(`${ANSI.gray}[${timestamp()}]${ANSI.reset} ${ANSI.blue}🖥${ANSI.reset}`, ...a),
+  divider: ()    => console.log(`${ANSI.gray}${"─".repeat(72)}${ANSI.reset}`),
 };
+
+// ─── Server start time (for uptime tracking) ──────────────────────────────────
+const SERVER_START_TIME = Date.now();
 
 // ─── Client Registry ──────────────────────────────────────────────────────────
 
-/**
- * Two separate Sets for each client type.
- * Keeping them separate lets us broadcast to extensions without an O(n)
- * type-check on every message and makes the stats output trivial.
- */
 const phones     = new Set(); // Android app connections
 const extensions = new Set(); // Chrome extension connections
-
-// Cache the last 50 notifications to prevent loss during Extension suspensions
-const notificationHistory = [];
 
 /** Returns a snapshot of current connection counts for logging. */
 function stats() {
@@ -130,7 +154,7 @@ function getNetworkIps() {
   for (const name of Object.keys(interfaces)) {
     for (const net of interfaces[name]) {
       if (net.family === "IPv4" && !net.internal) {
-        ips.push({ ip: net.address, name: name });
+        ips.push({ ip: net.address, name });
       }
     }
   }
@@ -138,30 +162,215 @@ function getNetworkIps() {
 }
 
 function broadcastPhoneStatus() {
-  broadcastToExtensions({
-    type: "phone_status",
-    connected: phones.size > 0
-  });
+  broadcastToExtensions({ type: "phone_status", connected: phones.size > 0 });
+}
+
+// ─── History Persistence ──────────────────────────────────────────────────────
+
+/**
+ * In-memory notification cache.
+ * Mirrors history.json on disk so the cache survives server restarts.
+ * Only "notification" type entries are persisted (not battery/media/clipboard).
+ */
+let notificationHistory = [];
+
+/** Debounce timer for disk writes — avoids hammering disk on bursts. */
+let persistTimer = null;
+
+/**
+ * Load history from history.json on startup.
+ * Silently ignores missing or corrupt files.
+ */
+function loadHistory() {
+  try {
+    if (!fs.existsSync(CONFIG.HISTORY_FILE)) {
+      log.info("No history.json found — starting with empty history.");
+      return;
+    }
+    const raw = fs.readFileSync(CONFIG.HISTORY_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      notificationHistory = parsed.slice(0, CONFIG.HISTORY_SIZE);
+      log.ok(`Loaded ${notificationHistory.length} notification(s) from history.json`);
+    }
+  } catch (err) {
+    log.warn("Failed to load history.json:", err.message, "— starting fresh.");
+    notificationHistory = [];
+  }
+}
+
+/**
+ * Schedule a debounced write of notificationHistory to history.json.
+ * Uses a 2-second debounce to coalesce rapid bursts into a single write.
+ */
+function scheduleHistoryWrite() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      fs.writeFileSync(CONFIG.HISTORY_FILE, JSON.stringify(notificationHistory, null, 2), "utf8");
+      log.debug(`history.json updated (${notificationHistory.length} entries)`);
+    } catch (err) {
+      log.error("Failed to write history.json:", err.message);
+    }
+  }, 2_000);
+}
+
+/**
+ * Clear notification history from memory and disk.
+ */
+function clearHistory() {
+  notificationHistory = [];
+  if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+  try {
+    fs.writeFileSync(CONFIG.HISTORY_FILE, "[]", "utf8");
+    log.ok("History cleared (memory + history.json).");
+  } catch (err) {
+    log.error("Failed to clear history.json:", err.message);
+  }
+}
+
+/**
+ * Add a notification to the history cache, with deduplication.
+ * A notification is considered a duplicate if its id OR key already exists.
+ */
+function cleanKey(key) {
+  if (typeof key !== "string") return key;
+  return key.trim().replace(/[\s\r\n]/g, "");
+}
+
+/**
+ * Append a notification to the in-memory history cache, capped at HISTORY_SIZE.
+ *
+ * @param {object} payload — parsed notification JSON
+ * @returns {boolean} true if added, false if it was a duplicate
+ */
+function addToHistory(payload) {
+  // Deduplication: skip if id or key matches an existing entry (using robust key cleaning)
+  const cleanPayloadId = cleanKey(payload.id);
+  const cleanPayloadKey = cleanKey(payload.key);
+  const isDuplicate = notificationHistory.some(n =>
+    (payload.id  && cleanKey(n.id) === cleanPayloadId)  ||
+    (payload.key && cleanKey(n.key) === cleanPayloadKey)
+  );
+
+  if (isDuplicate) {
+    log.debug(`Duplicate notification dropped (id=${payload.id}, key=${payload.key})`);
+    return false;
+  }
+
+  notificationHistory.unshift(payload);
+  if (notificationHistory.length > CONFIG.HISTORY_SIZE) {
+    notificationHistory.length = CONFIG.HISTORY_SIZE;
+  }
+
+  scheduleHistoryWrite();
+  return true;
+}
+
+// ─── Webhook ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fire-and-forget HTTP POST of a notification payload to CONFIG.WEBHOOK_URL.
+ * Uses native fetch (Node ≥ 18). Logs success/failure, never throws.
+ * @param {object} payload — the notification object to POST
+ */
+async function fireWebhook(payload) {
+  if (!CONFIG.WEBHOOK_URL) return;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONFIG.WEBHOOK_TIMEOUT_MS);
+
+    const res = await fetch(CONFIG.WEBHOOK_URL, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload),
+      signal:  controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (res.ok) {
+      log.ok(`Webhook delivered → ${CONFIG.WEBHOOK_URL} (HTTP ${res.status})`);
+    } else {
+      log.warn(`Webhook responded with HTTP ${res.status} from ${CONFIG.WEBHOOK_URL}`);
+    }
+  } catch (err) {
+    if (err.name === "AbortError") {
+      log.warn(`Webhook timed out after ${CONFIG.WEBHOOK_TIMEOUT_MS}ms`);
+    } else {
+      log.error("Webhook delivery failed:", err.message);
+    }
+  }
 }
 
 // ─── WebSocket Server ─────────────────────────────────────────────────────────
 
 /**
- * We wrap our WebSocketServer in a plain http.Server so that:
- *  a) We can listen on the same port for future HTTP health checks.
- *  b) We get the upgrade event for proper URL parsing.
- *
- * The http.Server itself returns a 426 Upgrade Required for any plain HTTP
- * request (handled implicitly by the ws library).
+ * HTTP server wrapping the WebSocket server.
+ * GET /         → plain-text status (human readable)
+ * GET /status   → JSON status (machine readable, for dashboards / health checks)
+ * All other requests → 404
  */
-const httpServer = createServer((_req, res) => {
-  // Respond to plain HTTP GET requests with a simple status page.
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end(
-    `Phone Notify Relay — WebSocket server running\n` +
-    `Port: ${CONFIG.PORT}\n` +
-    stats() + "\n"
-  );
+const httpServer = createServer((req, res) => {
+  const url = req.url?.split("?")[0] ?? "/";
+
+  if (url === "/status") {
+    // ── JSON status endpoint ──────────────────────────────────────────────────
+    const uptimeSec = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
+    const status = {
+      service:           "Phone Notify Relay",
+      version:           "3.0.0",
+      uptime_seconds:    uptimeSec,
+      port:              CONFIG.PORT,
+      connections: {
+        phones:     phones.size,
+        extensions: extensions.size,
+        total:      wss.clients.size,
+      },
+      history: {
+        cached: notificationHistory.length,
+        max:    CONFIG.HISTORY_SIZE,
+        last:   notificationHistory[0] ?? null,
+      },
+      webhook: {
+        enabled: !!CONFIG.WEBHOOK_URL,
+        url:     CONFIG.WEBHOOK_URL ?? null,
+      },
+      auth_required: !!CONFIG.TOKEN,
+      network_ips:   getNetworkIps(),
+    };
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(status, null, 2));
+    return;
+  }
+
+  if (url === "/") {
+    // ── Human-readable status page ───────────────────────────────────────────
+    const uptimeSec = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
+    const h = Math.floor(uptimeSec / 3600);
+    const m = Math.floor((uptimeSec % 3600) / 60);
+    const s = uptimeSec % 60;
+    const uptimeStr = `${h}h ${m}m ${s}s`;
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end(
+      `╔══════════════════════════════════════════╗\n` +
+      `║       Phone Notify Relay Server v3       ║\n` +
+      `╚══════════════════════════════════════════╝\n\n` +
+      `  Port:        ${CONFIG.PORT}\n` +
+      `  Uptime:      ${uptimeStr}\n` +
+      `  Phones:      ${phones.size}\n` +
+      `  Extensions:  ${extensions.size}\n` +
+      `  Cached:      ${notificationHistory.length} / ${CONFIG.HISTORY_SIZE} notifications\n` +
+      `  Webhook:     ${CONFIG.WEBHOOK_URL ?? "disabled"}\n` +
+      `  Auth:        ${CONFIG.TOKEN ? "required" : "disabled"}\n\n` +
+      `  JSON status: http://localhost:${CONFIG.PORT}/status\n`
+    );
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not Found\n");
 });
 
 const wss = new WebSocketServer({ server: httpServer });
@@ -169,120 +378,89 @@ const wss = new WebSocketServer({ server: httpServer });
 // ─── Connection Handler ───────────────────────────────────────────────────────
 
 wss.on("connection", (ws, req) => {
-  // ── 1. Identify client type from URL query parameter ──────────────────────
-
-  /**
-   * Parse the full URL from the upgrade request.
-   * req.url is only the path + query, so we prepend a dummy base.
-   * e.g.  /?type=phone  or  /?type=extension
-   */
+  // ── 1. Parse URL & identify client ───────────────────────────────────────────
   const requestUrl = new URL(req.url ?? "/", `ws://localhost:${CONFIG.PORT}`);
   const clientType = requestUrl.searchParams.get("type"); // "phone" | "extension" | null
   const clientIp   = req.socket.remoteAddress ?? "unknown";
 
-  // ── 1.5. Validate Token if configured ─────────────────────────────────────
-  const clientToken = requestUrl.searchParams.get("token");
-  if (CONFIG.TOKEN && clientToken !== CONFIG.TOKEN) {
-    log.warn(`Unauthorized connection attempt from ${clientIp} (invalid or missing token) — closing.`);
-    safeJsonSend(ws, {
-      type: "error",
-      message: "Unauthorized: Invalid or missing token",
-    });
-    ws.close(4001, "Unauthorized");
-    return;
+  // ── 2. Token authentication ───────────────────────────────────────────────────
+  if (CONFIG.TOKEN) {
+    const clientToken = requestUrl.searchParams.get("token");
+    if (clientToken !== CONFIG.TOKEN) {
+      log.warn(`Unauthorized connection from ${clientIp} (bad/missing token) — closing.`);
+      safeJsonSend(ws, { type: "error", message: "Unauthorized: Invalid or missing token" });
+      ws.close(4001, "Unauthorized");
+      return;
+    }
   }
 
-  // ── 2. Register client in the correct Set ─────────────────────────────────
-
+  // ── 3. Register in the correct Set ───────────────────────────────────────────
   if (clientType === "phone") {
-    // Close and remove any existing phone connections from the same IP to prevent duplicates
-    for (const oldPhone of phones) {
-      if (oldPhone.remoteIp === clientIp) {
+    // Close any existing connection from the same IP to prevent duplicates
+    for (const old of phones) {
+      if (old.remoteIp === clientIp) {
         log.info(`Deduplicating PHONE connection from ${clientIp} — closing old socket.`);
-        try {
-          oldPhone.close(1000, "Superceded by new connection");
-        } catch (e) {}
-        phones.delete(oldPhone);
+        try { old.close(1000, "Superseded"); } catch (_) {}
+        phones.delete(old);
       }
     }
     ws.remoteIp = clientIp;
     phones.add(ws);
     log.ok(`PHONE connected       ${ANSI.gray}${clientIp}${ANSI.reset}  —  ${stats()}`);
     broadcastPhoneStatus();
+
   } else if (clientType === "extension") {
     extensions.add(ws);
     log.ok(`EXTENSION connected   ${ANSI.gray}${clientIp}${ANSI.reset}  —  ${stats()}`);
 
-    // Greet the new extension so its console shows the connection is alive.
+    // Greet the new extension
     safeJsonSend(ws, {
-      type: "server_hello",
-      message: "Phone Notify relay connected. Waiting for notifications…",
+      type:      "server_hello",
+      message:   "Phone Notify relay connected. Waiting for notifications…",
+      version:   "3.0.0",
       timestamp: Date.now(),
     });
 
-    // Send the current phone connection status to the new extension
-    safeJsonSend(ws, {
-      type: "phone_status",
-      connected: phones.size > 0
-    });
+    // Send current phone status
+    safeJsonSend(ws, { type: "phone_status", connected: phones.size > 0 });
 
-    // Send the laptop's network IPs to the extension
-    safeJsonSend(ws, {
-      type: "server_ips",
-      ips: getNetworkIps()
-    });
+    // Send laptop network IPs
+    safeJsonSend(ws, { type: "server_ips", ips: getNetworkIps() });
 
-    // Send history if we have any cached notifications
+    // Replay cached notification history
     if (notificationHistory.length > 0) {
-      safeJsonSend(ws, {
-        type: "history",
-        notifications: notificationHistory,
-      });
+      safeJsonSend(ws, { type: "history", notifications: notificationHistory });
     }
+
   } else {
-    // Unknown client type — reject with a clear error message and close.
     log.warn(`Unknown client type "${clientType}" from ${clientIp} — closing.`);
     safeJsonSend(ws, {
-      type: "error",
-      message: 'Identify yourself: connect with ?type=phone or ?type=extension',
+      type:    "error",
+      message: "Identify yourself: connect with ?type=phone or ?type=extension",
     });
     ws.close(1008, "Missing client type");
     return;
   }
 
-  // ── 3. Heartbeat state ────────────────────────────────────────────────────
-
-  /**
-   * ws.isAlive is set to true on connection and on every pong event.
-   * The heartbeat interval (set up below) sets it to false before each ping.
-   * If it's still false at the next interval, the client is dead → terminate.
-   */
+  // ── 4. Heartbeat state ────────────────────────────────────────────────────────
   ws.isAlive = true;
-
   ws.on("pong", () => {
     ws.isAlive = true;
     log.debug(`Pong from ${clientIp} (${clientType})`);
   });
 
-  // ── 4. Message handler ─────────────────────────────────────────────────────
-
+  // ── 5. Message handler ────────────────────────────────────────────────────────
   ws.on("message", (rawData, isBinary) => {
-    // Ignore binary frames — all our payloads are UTF-8 text.
-    if (isBinary) {
-      log.warn(`Binary frame from ${clientIp} ignored.`);
-      return;
-    }
+    if (isBinary) { log.warn(`Binary frame from ${clientIp} ignored.`); return; }
 
     const raw = rawData.toString("utf8");
 
-    // ── 4a. Size guard ────────────────────────────────────────────────────────
     if (Buffer.byteLength(raw, "utf8") > CONFIG.MAX_PAYLOAD_BYTES) {
       log.warn(`Oversized payload (${Buffer.byteLength(raw, "utf8")} bytes) from ${clientIp} — dropped.`);
-      safeJsonSend(ws, { type: "error", message: "Payload too large" });
+      safeJsonSend(ws, { type: "error", message: "Payload too large (max 64 KB)" });
       return;
     }
 
-    // ── 4b. JSON parse & validate ─────────────────────────────────────────────
     let payload;
     try {
       payload = JSON.parse(raw);
@@ -292,9 +470,7 @@ wss.on("connection", (ws, req) => {
       return;
     }
 
-    log.debug(`Raw payload from ${clientIp}:`, raw);
-
-    // ── 4c. Route by client type ──────────────────────────────────────────────
+    log.debug(`Payload from ${clientIp} (${clientType}):`, raw);
 
     if (clientType === "phone") {
       handlePhoneMessage(payload, clientIp);
@@ -303,28 +479,22 @@ wss.on("connection", (ws, req) => {
     }
   });
 
-  // ── 5. Disconnect handler ─────────────────────────────────────────────────
-
+  // ── 6. Disconnect handler ─────────────────────────────────────────────────────
   ws.on("close", (code, reason) => {
-    // Remove from whichever Set this client was in
     const hadPhone = phones.has(ws);
     phones.delete(ws);
     extensions.delete(ws);
 
     const reasonStr = reason?.toString() || "no reason";
     log.info(
-      `${clientType?.toUpperCase() ?? "UNKNOWN"} disconnected  ${ANSI.gray}${clientIp}  code=${code}  reason="${reasonStr}"${ANSI.reset}  —  ${stats()}`
+      `${(clientType ?? "UNKNOWN").toUpperCase()} disconnected  ` +
+      `${ANSI.gray}${clientIp}  code=${code}  reason="${reasonStr}"${ANSI.reset}  —  ${stats()}`
     );
-
-    if (hadPhone) {
-      broadcastPhoneStatus();
-    }
+    if (hadPhone) broadcastPhoneStatus();
   });
 
-  // ── 6. Error handler ──────────────────────────────────────────────────────
-
+  // ── 7. Error handler ──────────────────────────────────────────────────────────
   ws.on("error", (err) => {
-    // Errors are followed by a 'close' event, so no manual cleanup needed here.
     log.error(`Socket error from ${clientIp} (${clientType}):`, err.message);
   });
 });
@@ -332,168 +502,271 @@ wss.on("connection", (ws, req) => {
 // ─── Phone Message Handler ────────────────────────────────────────────────────
 
 /**
- * handlePhoneMessage(payload, senderIp)
- * ──────────────────────────────────────
- * Validates a notification payload received from the Android app and
- * broadcasts it to all currently connected extension clients.
- *
- * Required fields (per the Phone Notify protocol):
- *   type      — must be "notification" or "notification_removed"
- *   timestamp — must be a number (Unix ms)
- *
- * Optional but expected for "notification":
- *   app, package, title, message
- *
- * @param {object} payload  — parsed JSON object from the phone
- * @param {string} senderIp — IP address of the sending phone (for logs)
+ * Valid message types from the Android phone.
+ * - notification         : new notification posted
+ * - notification_removed : notification dismissed on phone
+ * - battery              : battery level + charging state
+ * - clipboard            : phone clipboard content changed
+ * - media_status         : currently playing media track info
+ * - call                 : incoming / active / ended phone call
+ * - ping                 : keep-alive heartbeat (consumed, not relayed)
  */
+const VALID_PHONE_TYPES = new Set([
+  "notification",
+  "notification_removed",
+  "battery",
+  "clipboard",
+  "media_status",
+  "call",
+  "ping",
+  "sync_start",
+  "sync_end",
+  "clear_all_notifications",
+  "full_sync",
+]);
+
 function handlePhoneMessage(payload, senderIp) {
-  // ── Validate required fields ──────────────────────────────────────────────
-
-  const validTypes = ["notification", "notification_removed", "ping"];
-
-  if (!payload.type || !validTypes.includes(payload.type)) {
-    log.warn(`Phone message missing/invalid "type" field from ${senderIp} — dropped.`);
+  // ── Validate required fields ──────────────────────────────────────────────────
+  if (!payload.type || !VALID_PHONE_TYPES.has(payload.type)) {
+    log.warn(`Phone: invalid type "${payload.type}" from ${senderIp} — dropped.`);
     return;
   }
-
   if (typeof payload.timestamp !== "number") {
-    log.warn(`Phone message missing numeric "timestamp" from ${senderIp} — dropped.`);
+    log.warn(`Phone: missing numeric timestamp from ${senderIp} — dropped.`);
     return;
   }
 
-  // ── Handle phone-side ping (keep-alive from Android) ─────────────────────
-
+  // ── Ping: consume, don't relay ────────────────────────────────────────────────
   if (payload.type === "ping") {
-    log.debug(`Keep-alive ping from phone ${senderIp}`);
+    log.debug(`Keep-alive ping from ${senderIp}`);
     return;
   }
 
-  // ── Log the incoming notification ─────────────────────────────────────────
+  // ── Sync start: phone is about to send its current active notifications ────────
+  // Clear the server-side history so the extension gets a fresh, accurate list.
+  if (payload.type === "sync_start") {
+    log.phone(`SYNC_START — clearing history and syncing active notifications`);
+    clearHistory();
+    broadcastToExtensions({ type: "sync_start" });
+    return;
+  }
 
+  // ── Sync end: phone has finished sending its active notifications ─────────────
+  if (payload.type === "sync_end") {
+    log.phone(`SYNC_END — active notification sync complete`);
+    broadcastToExtensions({ type: "sync_end" });
+    return;
+  }
+
+  // ── Clear all notifications: clear history and broadcast ───────────────────────
+  if (payload.type === "clear_all_notifications") {
+    log.phone(`CLEAR_ALL_NOTIFICATIONS — clearing history and broadcasting`);
+    clearHistory();
+    broadcastToExtensions({ type: "clear_all_notifications", timestamp: payload.timestamp });
+    return;
+  }
+
+  // ── Full sync: replace history with the phone's active notifications ───────────
+  if (payload.type === "full_sync") {
+    const notifs = payload.notifications || [];
+    log.phone(`FULL_SYNC — replacing history with ${notifs.length} active notification(s)`);
+    
+    // Ensure all received notifications have deterministic IDs
+    for (const notif of notifs) {
+      if (!notif.id) {
+        if (notif.key) {
+          notif.id = notif.key;
+        } else {
+          const seed = (notif.package ?? "") + (notif.title ?? "") + (notif.message ?? "");
+          notif.id = `n-${notif.timestamp || Date.now()}-${Math.abs(hashCode(seed))}`;
+        }
+      }
+    }
+    
+    // Replace history
+    notificationHistory = notifs.slice(0, CONFIG.HISTORY_SIZE);
+    scheduleHistoryWrite();
+    
+    broadcastToExtensions(payload);
+    return;
+  }
+
+  // ── Notification: add to history, dedup, webhook ──────────────────────────────
   if (payload.type === "notification") {
     // Generate deterministic id if not present
-    const uniqueStr = (payload.package ?? "") + (payload.title ?? "") + (payload.message ?? "");
-    payload.id = payload.id || `n-${payload.timestamp}-${Math.abs(hashCode(uniqueStr))}`;
-
-    // Add to history cache
-    notificationHistory.push(payload);
-    if (notificationHistory.length > 50) {
-      notificationHistory.shift();
+    if (!payload.id) {
+      if (payload.key) {
+        payload.id = payload.key;
+      } else {
+        const seed = (payload.package ?? "") + (payload.title ?? "") + (payload.message ?? "");
+        payload.id = `n-${payload.timestamp}-${Math.abs(hashCode(seed))}`;
+      }
     }
 
-    log.info(
-      `📨 NOTIFICATION  ${ANSI.cyan}[${payload.app ?? "?"}]${ANSI.reset}` +
-      `  "${payload.title ?? ""}"  "${payload.message ?? ""}"`
+    const added = addToHistory(payload);
+
+    log.phone(
+      `NOTIFICATION  ${ANSI.cyan}[${payload.app ?? "?"}]${ANSI.reset}` +
+      `  device="${payload.deviceName ?? "?"}"` +
+      `  "${payload.title ?? ""}"  "${(payload.message ?? "").slice(0, 60)}"`
     );
-  } else if (payload.type === "notification_removed") {
-    // Remove matches from history cache
+
+    // Only fire webhook for genuinely new (non-duplicate) notifications
+    if (added) fireWebhook(payload);
+  }
+
+  // ── Notification removed: sync history ───────────────────────────────────────
+  if (payload.type === "notification_removed") {
     const key = payload.key;
     const pkg = payload.package;
 
     if (key) {
-      for (let i = notificationHistory.length - 1; i >= 0; i--) {
-        if (notificationHistory[i].key === key) {
-          notificationHistory.splice(i, 1);
-        }
-      }
+      const targetKey = cleanKey(key);
+      const before = notificationHistory.length;
+      notificationHistory = notificationHistory.filter(n => cleanKey(n.key) !== targetKey && cleanKey(n.id) !== targetKey);
+      if (notificationHistory.length !== before) scheduleHistoryWrite();
     } else if (pkg) {
-      for (let i = notificationHistory.length - 1; i >= 0; i--) {
-        if (notificationHistory[i].package === pkg) {
-          notificationHistory.splice(i, 1);
-        }
-      }
+      const before = notificationHistory.length;
+      notificationHistory = notificationHistory.filter(n => n.package !== pkg);
+      if (notificationHistory.length !== before) scheduleHistoryWrite();
     }
-    log.info(`🗑  REMOVED  key=${payload.key ?? "?"} package=${payload.package ?? "?"}`);
+
+    log.phone(`REMOVED  key=${key ?? "?"} package=${pkg ?? "?"}`);
   }
 
-  // ── Broadcast to all extensions ───────────────────────────────────────────
+  // ── Battery: log and relay ────────────────────────────────────────────────────
+  if (payload.type === "battery") {
+    log.phone(`BATTERY  level=${payload.level ?? "?"}%  charging=${payload.charging ?? "?"}`);
+  }
 
+  // ── Clipboard: log and relay ──────────────────────────────────────────────────
+  if (payload.type === "clipboard") {
+    log.phone(`CLIPBOARD  "${(payload.text ?? "").slice(0, 60)}"`);
+  }
+
+  // ── Media status: log and relay ───────────────────────────────────────────────
+  if (payload.type === "media_status") {
+    log.phone(
+      `MEDIA  ${payload.playing ? "▶" : "⏸"}  ` +
+      `"${payload.title ?? "?"}" — ${payload.artist ?? "?"}`
+    );
+  }
+
+  // ── Call: log and relay ───────────────────────────────────────────────────────
+  if (payload.type === "call") {
+    log.phone(
+      `CALL  state=${payload.state ?? "?"}  ` +
+      `caller="${payload.callerName ?? payload.callerNumber ?? "Unknown"}"`
+    );
+  }
+
+  // ── Relay all non-ping messages to extensions ────────────────────────────────
   broadcastToExtensions(payload);
 }
 
 // ─── Extension Message Handler ────────────────────────────────────────────────
 
 /**
- * handleExtensionMessage(payload, senderIp)
- * Forward reply events from Chrome extensions to active phone client(s)
+ * Messages from the Chrome extension → forwarded to the phone(s).
+ *
+ * reply              → quick reply text for a notification
+ * call_action        → answer / reject / silence a call
+ * media_control      → play / pause / next / previous track
+ * clipboard_to_phone → push clipboard text to phone
  */
 function handleExtensionMessage(payload, senderIp) {
-  log.debug(`Message from extension ${senderIp}:`, payload);
+  log.debug(`Extension message from ${senderIp}:`, payload);
 
-  if (payload.type === "reply") {
-    log.info(`📤 Forwarding REPLY from extension ${senderIp} to phone: key=${payload.key} message="${payload.message}"`);
-    const json = JSON.stringify(payload);
-    let sentCount = 0;
+  const type = payload.type;
 
-    for (const phone of phones) {
-      if (phone.readyState === WebSocket.OPEN) {
-        phone.send(json, (err) => {
-          if (err) log.error("Send reply to phone failed:", err.message);
-        });
-        sentCount++;
-      }
-    }
-    log.ok(`📤 Forwarded reply to ${sentCount}/${phones.size} phone(s)`);
+  if (type === "reply") {
+    log.ext(`REPLY  key="${payload.key}"  message="${payload.message}"`);
+    forwardToPhones(payload, senderIp, "reply");
+    return;
   }
+
+  if (type === "call_action") {
+    log.ext(`CALL ACTION  action="${payload.action}"`);
+    forwardToPhones(payload, senderIp, "call_action");
+    return;
+  }
+
+  if (type === "media_control") {
+    log.ext(`MEDIA CONTROL  action="${payload.action}"`);
+    forwardToPhones(payload, senderIp, "media_control");
+    return;
+  }
+
+  if (type === "clipboard_to_phone") {
+    log.ext(`CLIPBOARD → PHONE  "${(payload.text ?? "").slice(0, 60)}"`);
+    forwardToPhones(payload, senderIp, "clipboard_to_phone");
+    return;
+  }
+
+  log.warn(`Extension sent unknown message type "${type}" from ${senderIp} — ignored.`);
+}
+
+/**
+ * Forward a payload from an extension to all connected phones.
+ * @param {object} payload   — the message to forward
+ * @param {string} senderIp  — extension IP (for logging)
+ * @param {string} label     — human label for the log line
+ */
+function forwardToPhones(payload, senderIp, label) {
+  const json = JSON.stringify(payload);
+  let sent = 0;
+
+  for (const phone of phones) {
+    if (phone.readyState === WebSocket.OPEN) {
+      phone.send(json, (err) => {
+        if (err) log.error(`Failed to forward ${label} to phone:`, err.message);
+      });
+      sent++;
+    }
+  }
+
+  log.ok(`Forwarded ${label} from extension ${senderIp} to ${sent}/${phones.size} phone(s)`);
 }
 
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 
 /**
- * broadcastToExtensions(payload)
- * ──────────────────────────────
- * Serialises [payload] to JSON and sends it to every extension in the registry
- * whose socket is in the OPEN state.
- *
- * Skips extensions whose socket has closed or errored since registration.
- *
- * @param {object} payload — object to serialise and send
- * @returns {number} number of extension clients the message was delivered to
+ * Serialise [payload] to JSON and send it to every OPEN extension.
+ * @param {object} payload
+ * @returns {number} number of extensions delivered to
  */
 function broadcastToExtensions(payload) {
   if (extensions.size === 0) {
-    log.warn("No extensions connected — notification will be queued by the Android app.");
+    log.warn("No extensions connected — notification may be lost.");
     return 0;
   }
 
   const json = JSON.stringify(payload);
-  let deliveredCount = 0;
+  let count  = 0;
 
   for (const ext of extensions) {
     if (ext.readyState === WebSocket.OPEN) {
       ext.send(json, (err) => {
         if (err) log.error("Send to extension failed:", err.message);
       });
-      deliveredCount++;
+      count++;
     }
   }
 
-  log.ok(`📤 Forwarded to ${deliveredCount}/${extensions.size} extension(s)`);
-  return deliveredCount;
+  log.ok(`Relayed [${payload.type}] to ${count}/${extensions.size} extension(s)`);
+  return count;
 }
 
-/**
- * hashCode(str)
- * Hash a string to a 32-bit signed integer.
- */
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+/** djb2-like hash: string → 32-bit signed integer. */
 function hashCode(str) {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = Math.imul(31, h) + str.charCodeAt(i) | 0;
   return h;
 }
 
-// ─── Safe Send Utility ────────────────────────────────────────────────────────
-
-/**
- * safeJsonSend(ws, obj)
- * ──────────────────────
- * Serialises [obj] to JSON and sends it over [ws], only if the socket is open.
- * Swallows the error (logs it) so callers don't need try/catch.
- *
- * @param {WebSocket} ws   — target socket
- * @param {object}    obj  — object to send
- */
+/** Send JSON to a single WebSocket, safe (ignores closed sockets). */
 function safeJsonSend(ws, obj) {
   if (ws.readyState !== WebSocket.OPEN) return;
   try {
@@ -505,38 +778,13 @@ function safeJsonSend(ws, obj) {
 
 // ─── Heartbeat ────────────────────────────────────────────────────────────────
 
-/**
- * Heartbeat interval — runs every CONFIG.HEARTBEAT_INTERVAL milliseconds.
- *
- * Algorithm (standard ws library pattern):
- *   1. For every client in wss.clients:
- *      a. If isAlive is false → the client didn't respond to the LAST ping.
- *         Terminate the socket (triggers 'close' event → Set cleanup).
- *      b. Mark isAlive = false, then send a ping.
- *   2. The client's 'pong' event handler sets isAlive back to true.
- *   3. At the next interval, living clients pass check (a); dead ones are culled.
- *
- * This catches:
- *   - Phone screen turning off (TCP keep-alive may not fire in time)
- *   - Wi-Fi network change on the phone
- *   - Browser tab with extension closed
- *   - Process kill / OOM
- */
 const heartbeatInterval = setInterval(() => {
   let terminated = 0;
-
   for (const ws of wss.clients) {
-    if (!ws.isAlive) {
-      // Client missed the last ping — assume dead, terminate
-      ws.terminate();
-      terminated++;
-      continue;
-    }
-
+    if (!ws.isAlive) { ws.terminate(); terminated++; continue; }
     ws.isAlive = false;
-    ws.ping(); // triggers ws.on("pong") on the client side if alive
+    ws.ping();
   }
-
   if (terminated > 0) {
     log.warn(`Heartbeat: terminated ${terminated} dead connection(s)  —  ${stats()}`);
   } else {
@@ -544,119 +792,176 @@ const heartbeatInterval = setInterval(() => {
   }
 }, CONFIG.HEARTBEAT_INTERVAL);
 
-// Prevent the interval from keeping the process alive after intentional shutdown.
 heartbeatInterval.unref();
 
-// ─── Test Command (stdin) ─────────────────────────────────────────────────────
+// ─── Test Notification Templates ──────────────────────────────────────────────
 
-/**
- * Interactive test command.
- *
- * While the server is running in a terminal, type:
- *   test        → sends a fake WhatsApp notification to all connected extensions
- *   test gmail  → sends a fake Gmail notification
- *   stats       → prints current connection counts
- *   help        → prints available commands
- *
- * This is for development only — lets you verify the Chrome extension renders
- * cards correctly without needing a real phone.
- */
-
-/** Test notification templates keyed by short name. */
 const TEST_NOTIFICATIONS = {
   whatsapp: {
-    type:      "notification",
-    app:       "WhatsApp",
-    package:   "com.whatsapp",
-    title:     "Alex Rivera",
-    message:   "Hey! Are you coming to the meetup tonight? 🎉",
-    timestamp: Date.now(),
+    type: "notification", app: "WhatsApp", package: "com.whatsapp",
+    title: "Alex Rivera", message: "Hey! Are you coming to the meetup tonight? 🎉",
+    deviceName: "Test Device",
   },
   telegram: {
-    type:      "notification",
-    app:       "Telegram",
-    package:   "org.telegram.messenger",
-    title:     "Design Hub",
-    message:   "🔥 New Figma plugin just dropped — check the pinned message!",
-    timestamp: Date.now(),
+    type: "notification", app: "Telegram", package: "org.telegram.messenger",
+    title: "Design Hub", message: "🔥 New Figma plugin just dropped — check the pinned message!",
+    deviceName: "Test Device",
   },
   gmail: {
-    type:      "notification",
-    app:       "Gmail",
-    package:   "com.google.android.gm",
-    title:     "GitHub",
-    message:   "Your pull request #42 'feat: dark mode' was merged into main ✅",
-    timestamp: Date.now(),
+    type: "notification", app: "Gmail", package: "com.google.android.gm",
+    title: "GitHub", message: "Your pull request #42 'feat: dark mode' was merged into main ✅\n\nCongratulatons! Your contribution to the project has been accepted by the maintainer.",
+    deviceName: "Test Device",
   },
   instagram: {
-    type:      "notification",
-    app:       "Instagram",
-    package:   "com.instagram.android",
-    title:     "Jordan Lee",
-    message:   "Liked your photo: 'Golden hour at the coast 🌅'",
-    timestamp: Date.now(),
+    type: "notification", app: "Instagram", package: "com.instagram.android",
+    title: "Jordan Lee", message: "Liked your photo: 'Golden hour at the coast 🌅'",
+    deviceName: "Test Device",
   },
   discord: {
-    type:      "notification",
-    app:       "Discord",
-    package:   "com.discord",
-    title:     "dev-general",
-    message:   "neon: anyone tried the new Bun 1.2 release? insanely fast 🚀",
-    timestamp: Date.now(),
+    type: "notification", app: "Discord", package: "com.discord",
+    title: "dev-general", message: "neon: anyone tried the new Bun 1.2 release? insanely fast 🚀",
+    deviceName: "Test Device",
   },
 };
 
-/** Print available commands to the terminal. */
+const TEST_CALL = {
+  type: "call", state: "ringing",
+  callerName: "Mom",
+  callerNumber: "+1 (555) 123-4567",
+  deviceName: "Test Device",
+};
+
+const TEST_BATTERY = {
+  type: "battery", level: 42, charging: false,
+  deviceName: "Test Device",
+};
+
+const TEST_MEDIA = {
+  type: "media_status", playing: true,
+  title: "Blinding Lights",
+  artist: "The Weeknd",
+  album: "After Hours",
+  deviceName: "Test Device",
+};
+
+// ─── Terminal Commands ────────────────────────────────────────────────────────
+
 function printHelp() {
   console.log(`
-${ANSI.cyan}Phone Notify Server — Interactive Commands${ANSI.reset}
+${ANSI.cyan}Phone Notify Server v3 — Interactive Commands${ANSI.reset}
 
-  ${ANSI.bold}test [app]${ANSI.reset}   Send a fake notification to all extensions.
-               app: whatsapp (default), telegram, gmail, instagram, discord
+  ${ANSI.bold}test [app]${ANSI.reset}       Send a fake notification.
+                   app: whatsapp (default), telegram, gmail, instagram, discord
 
-  ${ANSI.bold}stats${ANSI.reset}        Show current connection counts.
+  ${ANSI.bold}call${ANSI.reset}             Send a fake incoming call notification.
 
-  ${ANSI.bold}help${ANSI.reset}         Show this help message.
+  ${ANSI.bold}battery${ANSI.reset}          Send a fake battery status (42%, not charging).
 
-  ${ANSI.bold}Ctrl+C${ANSI.reset}       Graceful shutdown.
+  ${ANSI.bold}media${ANSI.reset}            Send a fake media status (Blinding Lights ▶).
+
+  ${ANSI.bold}stats${ANSI.reset}            Show current connection counts.
+
+  ${ANSI.bold}history [n]${ANSI.reset}      Print the last N cached notifications (default: 5).
+
+  ${ANSI.bold}clear${ANSI.reset}            Clear notification history (memory + history.json).
+
+  ${ANSI.bold}webhook [url]${ANSI.reset}    Set the webhook URL at runtime. Pass no URL to disable.
+
+  ${ANSI.bold}help${ANSI.reset}             Show this help message.
+
+  ${ANSI.bold}Ctrl+C${ANSI.reset}           Graceful shutdown.
 `);
 }
 
-// Only attach stdin handler when running interactively (not piped).
 if (process.stdin.isTTY) {
-  const rl = readline.createInterface({
-    input:    process.stdin,
-    output:   process.stdout,
-    terminal: false,
-  });
-
-  // Prompt style
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
   process.stdout.write(`${ANSI.gray}Type "help" for available commands.\n${ANSI.reset}`);
 
   rl.on("line", (line) => {
-    const parts   = line.trim().toLowerCase().split(/\s+/);
-    const command = parts[0];
-    const arg     = parts[1] ?? "whatsapp";
+    const parts   = line.trim().split(/\s+/);
+    const command = parts[0].toLowerCase();
+    const arg     = parts[1] ?? "";
 
     switch (command) {
 
       case "test": {
-        const template = TEST_NOTIFICATIONS[arg] ?? TEST_NOTIFICATIONS.whatsapp;
-        // Always refresh the timestamp
-        const payload = { ...template, timestamp: Date.now() };
+        const key      = arg.toLowerCase() || "whatsapp";
+        const template = TEST_NOTIFICATIONS[key] ?? TEST_NOTIFICATIONS.whatsapp;
+        const payload  = { ...template, timestamp: Date.now() };
+
+        // Generate id
+        const seed = (payload.package ?? "") + (payload.title ?? "") + (payload.message ?? "");
+        payload.id = `n-${payload.timestamp}-${Math.abs(hashCode(seed))}`;
 
         log.info(`🧪 TEST: sending fake ${payload.app} notification…`);
         const count = broadcastToExtensions(payload);
+        if (count === 0) log.warn("No extensions connected. Open the Chrome extension first.");
+        break;
+      }
 
-        if (count === 0) {
-          log.warn("No extension clients connected. Open the Chrome extension first.");
-        }
+      case "call": {
+        const payload = { ...TEST_CALL, timestamp: Date.now() };
+        log.info("🧪 TEST: sending fake incoming call…");
+        const count = broadcastToExtensions(payload);
+        if (count === 0) log.warn("No extensions connected.");
+        break;
+      }
+
+      case "battery": {
+        const payload = { ...TEST_BATTERY, timestamp: Date.now() };
+        log.info("🧪 TEST: sending fake battery status…");
+        broadcastToExtensions(payload);
+        break;
+      }
+
+      case "media": {
+        const payload = { ...TEST_MEDIA, timestamp: Date.now() };
+        log.info("🧪 TEST: sending fake media status…");
+        broadcastToExtensions(payload);
         break;
       }
 
       case "stats":
-        console.log(`\n  ${stats()}\n`);
+        console.log(`\n  ${stats()}\n  Cached: ${notificationHistory.length}/${CONFIG.HISTORY_SIZE}\n  Webhook: ${CONFIG.WEBHOOK_URL ?? "disabled"}\n`);
         break;
+
+      case "history": {
+        const n = parseInt(arg, 10) || 5;
+        const slice = notificationHistory.slice(0, n);
+        if (slice.length === 0) {
+          console.log(`  ${ANSI.gray}(no notifications in history)${ANSI.reset}`);
+        } else {
+          console.log(`\n  ${ANSI.cyan}Last ${slice.length} notification(s):${ANSI.reset}`);
+          slice.forEach((notif, i) => {
+            console.log(
+              `  ${ANSI.gray}${i + 1}.${ANSI.reset}` +
+              `  ${ANSI.cyan}[${notif.app ?? "?"}]${ANSI.reset}` +
+              `  "${notif.title ?? ""}"` +
+              `  ${ANSI.gray}${new Date(notif.timestamp).toLocaleTimeString()}${ANSI.reset}` +
+              (notif.deviceName ? `  ${ANSI.gray}(${notif.deviceName})${ANSI.reset}` : "")
+            );
+          });
+          console.log();
+        }
+        break;
+      }
+
+      case "clear":
+        clearHistory();
+        // Also notify connected extensions to clear their display
+        broadcastToExtensions({ type: "history_cleared", timestamp: Date.now() });
+        break;
+
+      case "webhook": {
+        if (arg) {
+          CONFIG.WEBHOOK_URL = arg;
+          log.ok(`Webhook set to: ${CONFIG.WEBHOOK_URL}`);
+        } else {
+          CONFIG.WEBHOOK_URL = null;
+          log.ok("Webhook disabled.");
+        }
+        break;
+      }
 
       case "help":
       case "":
@@ -671,46 +976,56 @@ if (process.stdin.isTTY) {
   rl.on("close", () => shutdown("stdin closed"));
 }
 
-// ─── Start Server ─────────────────────────────────────────────────────────────
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+// Load persisted notification history before accepting connections
+loadHistory();
 
 httpServer.listen(CONFIG.PORT, () => {
   log.divider();
-  console.log(`\n  ${ANSI.bold}${ANSI.green}Phone Notify Relay Server${ANSI.reset}\n`);
+  console.log(`\n  ${ANSI.bold}${ANSI.green}Phone Notify Relay Server${ANSI.reset}  ${ANSI.gray}v3.0.0${ANSI.reset}\n`);
   console.log(`  ${ANSI.cyan}WebSocket${ANSI.reset}  ws://0.0.0.0:${CONFIG.PORT}`);
-  console.log(`  ${ANSI.cyan}HTTP${ANSI.reset}       http://0.0.0.0:${CONFIG.PORT}  (status page)\n`);
-  
-  console.log(`  ${ANSI.gray}Available URLs for Android App:${ANSI.reset}`);
+  console.log(`  ${ANSI.cyan}HTTP${ANSI.reset}       http://0.0.0.0:${CONFIG.PORT}  (status page)`);
+  console.log(`  ${ANSI.cyan}JSON API${ANSI.reset}   http://0.0.0.0:${CONFIG.PORT}/status\n`);
+
   const localIps = getNetworkIps();
-  localIps.forEach(item => {
-    console.log(`    ws://${item.ip}:${CONFIG.PORT}?type=phone (${item.name})`);
-  });
-  if (localIps.length === 0) {
-    console.log(`    ws://<LAN-IP>:${CONFIG.PORT}?type=phone`);
+  if (localIps.length > 0) {
+    console.log(`  ${ANSI.gray}Android App URLs:${ANSI.reset}`);
+    localIps.forEach(item =>
+      console.log(`    ws://${item.ip}:${CONFIG.PORT}?type=phone  ${ANSI.gray}(${item.name})${ANSI.reset}`)
+    );
   }
-  console.log(`\n  ${ANSI.gray}Extension URL:     ws://localhost:${CONFIG.PORT}?type=extension${ANSI.reset}\n`);
+  console.log(`\n  ${ANSI.gray}Extension URL:  ws://localhost:${CONFIG.PORT}?type=extension${ANSI.reset}`);
+  console.log(`  ${ANSI.gray}History file:   ${CONFIG.HISTORY_FILE}${ANSI.reset}`);
+  if (CONFIG.WEBHOOK_URL) {
+    console.log(`  ${ANSI.yellow}Webhook:        ${CONFIG.WEBHOOK_URL}${ANSI.reset}`);
+  }
+  if (CONFIG.TOKEN) {
+    console.log(`  ${ANSI.yellow}Auth:           token required${ANSI.reset}`);
+  }
+  console.log();
   log.divider();
   printHelp();
 });
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────────────
 
-/**
- * shutdown(reason)
- * ─────────────────
- * Cleanly closes all WebSocket connections, stops the heartbeat, and shuts down
- * the HTTP server. Called on SIGINT (Ctrl+C) and SIGTERM (systemd / Docker stop).
- *
- * @param {string} reason — description for the log
- */
 function shutdown(reason) {
   log.info(`Shutting down: ${reason}`);
-
   clearInterval(heartbeatInterval);
 
-  // Close all open sockets with a 1001 "going away" close frame
-  for (const ws of wss.clients) {
-    ws.close(1001, "Server shutting down");
+  // Flush any pending history write immediately
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    try {
+      fs.writeFileSync(CONFIG.HISTORY_FILE, JSON.stringify(notificationHistory, null, 2), "utf8");
+      log.ok("history.json flushed on shutdown.");
+    } catch (err) {
+      log.error("Failed to flush history.json:", err.message);
+    }
   }
+
+  for (const ws of wss.clients) ws.close(1001, "Server shutting down");
 
   wss.close(() => {
     httpServer.close(() => {
@@ -719,17 +1034,9 @@ function shutdown(reason) {
     });
   });
 
-  // Force-exit after 5 s if something hangs
-  setTimeout(() => {
-    log.warn("Forced exit after 5 s timeout.");
-    process.exit(1);
-  }, 5_000).unref();
+  setTimeout(() => { log.warn("Forced exit."); process.exit(1); }, 5_000).unref();
 }
 
 process.on("SIGINT",  () => shutdown("SIGINT (Ctrl+C)"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
-
-// Catch unhandled promise rejections to prevent silent crashes
-process.on("unhandledRejection", (reason) => {
-  log.error("Unhandled rejection:", reason);
-});
+process.on("unhandledRejection", (reason) => log.error("Unhandled rejection:", reason));

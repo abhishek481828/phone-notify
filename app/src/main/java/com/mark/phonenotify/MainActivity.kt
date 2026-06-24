@@ -1,63 +1,177 @@
 package com.mark.phonenotify
 
+import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
+import android.telecom.TelecomManager
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.view.KeyEvent
 import android.view.View
 import android.view.animation.AnimationUtils
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.mark.phonenotify.databinding.ActivityMainBinding
+import org.json.JSONObject
 
 /**
- * MainActivity.kt
- * ────────────────
+ * MainActivity.kt — v3
+ * ─────────────────────
  * Single-activity UI for Phone Notify.
  *
- * ── What it manages ──
- *   1. Permission banner — shown until Notification Access is granted.
- *   2. IP + Port input fields — restored from SettingsManager on every launch.
- *   3. Live URL preview — shows the ws:// URL as the user types.
- *   4. Connect / Disconnect / Retry button — drives WebSocketManager.
- *   5. Connection status indicator — colored dot + label (main-thread safe).
- *   6. Notifications sent counter — updated by WebSocketManager callback.
- *   7. Notifications captured counter — updated by NotificationService callback.
+ * ── v3 additions ──
+ *   1. Token input field — saved to SettingsManager and appended to WebSocket URL
+ *   2. Battery receiver — fires sendBatteryStatus() on battery change events
+ *   3. Phone state listener — fires sendCallStatus() on RINGING/OFFHOOK/IDLE
+ *   4. Call control — answerCall() / rejectCall() via TelecomManager
+ *   5. Runtime permission requests — READ_PHONE_STATE, ANSWER_PHONE_CALLS, CALL_PHONE
+ *   6. Clipboard receiver — sets phone clipboard when extension sends clipboard_to_phone
  *
- * ── Threading model ──
- *   WebSocketManager.onStatusChanged        → posted to main thread internally ✓
- *   WebSocketManager.onNotificationSent     → posted to main thread internally ✓
- *   NotificationService.onCountChanged      → posted to main thread internally ✓
- *   All of the above: UI updates here are directly safe without runOnUiThread{}.
- *
- * ── Settings persistence ──
- *   IP and port are saved to SharedPreferences (via SettingsManager) the moment
- *   the user taps Connect. They are restored via SettingsManager on onCreate().
+ * ── Thread model ──
+ *   WebSocketManager.onStatusChanged        → main thread ✓
+ *   WebSocketManager.onNotificationSent     → main thread ✓
+ *   WebSocketManager.onCallAction           → main thread ✓
+ *   WebSocketManager.onMediaControl         → main thread ✓
+ *   WebSocketManager.onClipboardReceived    → main thread ✓
+ *   NotificationService.onCountChanged      → main thread ✓
+ *   BatteryReceiver.onReceive               → main thread ✓
+ *   PhoneStateListener.onCallStateChanged   → main thread ✓
  */
 class MainActivity : AppCompatActivity() {
 
-    // ── View Binding ───────────────────────────────────────────────────────────
-
     private lateinit var binding: ActivityMainBinding
-
-    // ── Dependencies ───────────────────────────────────────────────────────────
-
-    /** SharedPreferences wrapper. Persists IP + port across sessions. */
     private lateinit var settings: SettingsManager
-
-    // ── Lifecycle ───────────────────────────────────────────────────────────────
 
     companion object {
         private const val TAG = "PhoneNotify:Main"
+
+        // Runtime permission request codes
+        private const val REQ_PHONE_PERMISSIONS = 1001
     }
+
+    // ── Clipboard listener (phone → extension) ───────────────────────────────
+    //
+    // When the user copies something on the phone, we automatically forward
+    // the clipboard text to the extension via WebSocket. The extension then
+    // shows a dismissible toast with a "Copy" button so the user can paste
+    // it into any browser field instantly.
+    //
+    // Limits: 8 000 chars max to avoid large frames; only when WS is connected.
+    //
+    private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
+        try {
+            val cm   = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
+                ?: return@OnPrimaryClipChangedListener
+            if (text.isBlank()) return@OnPrimaryClipChangedListener
+
+            if (!WebSocketManager.isConnected()) {
+                Log.d(TAG, "Clipboard changed but WS offline — not forwarding")
+                return@OnPrimaryClipChangedListener
+            }
+
+            val payload = JSONObject().apply {
+                put("type",       "clipboard_from_phone")
+                put("text",       text.take(8_000))
+                put("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}".trim())
+                put("timestamp",  System.currentTimeMillis())
+            }
+            val sent = WebSocketManager.send(payload.toString())
+            Log.i(TAG, "📋 Clipboard → extension: ${text.take(40)} ${if (sent) "→ sent" else "→ queued"}")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Clipboard listener error: ${e.message}")
+        }
+    }
+
+
+    private val batteryReceiver = object : BroadcastReceiver() {
+        private var lastLevel   = -1
+        private var lastCharging = false
+
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_BATTERY_CHANGED) return
+
+            val level    = intent.getIntExtra(BatteryManager.EXTRA_LEVEL,  -1)
+            val scale    = intent.getIntExtra(BatteryManager.EXTRA_SCALE,  100)
+            val status   = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                           status == BatteryManager.BATTERY_STATUS_FULL
+
+            val pct = if (scale > 0) (level * 100 / scale) else level
+
+            // Only send if something actually changed (avoid spam on ticker events)
+            if (pct != lastLevel || charging != lastCharging) {
+                lastLevel   = pct
+                lastCharging = charging
+                NotificationService.sendBatteryStatus(pct, charging)
+                Log.d(TAG, "Battery changed: ${pct}% charging=$charging")
+            }
+        }
+    }
+
+    // ── Phone State Listener ───────────────────────────────────────────────────
+    //
+    // PhoneStateListener is deprecated in API 31 in favour of TelephonyCallback,
+    // but PhoneStateListener is still functional on all API levels and is the
+    // simplest cross-version approach for a personal project.
+
+    @Suppress("DEPRECATION")
+    private val phoneStateListener = object : PhoneStateListener() {
+
+        private var lastState    = TelephonyManager.CALL_STATE_IDLE
+        private var lastNumber   = ""
+
+        @Deprecated("Deprecated in Java")
+        override fun onCallStateChanged(state: Int, incomingNumber: String?) {
+            if (state == lastState) return
+            lastState = state
+            val number = incomingNumber ?: ""
+            if (number.isNotBlank()) lastNumber = number
+
+            val callNumber = if (number.isNotBlank()) number else lastNumber
+
+            when (state) {
+                TelephonyManager.CALL_STATE_RINGING -> {
+                    Log.i(TAG, "📞 RINGING: $callNumber")
+                    NotificationService.sendCallStatus("ringing", callNumber)
+                }
+                TelephonyManager.CALL_STATE_OFFHOOK -> {
+                    Log.i(TAG, "📞 OFFHOOK (answered)")
+                    NotificationService.sendCallStatus("answered", callNumber)
+                }
+                TelephonyManager.CALL_STATE_IDLE -> {
+                    Log.i(TAG, "📞 IDLE (ended/missed)")
+                    NotificationService.sendCallStatus("ended", callNumber)
+                    lastNumber = ""
+                }
+            }
+        }
+    }
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "MainActivity.onCreate() — package: ${packageName}")
-
         binding  = ActivityMainBinding.inflate(layoutInflater)
         settings = SettingsManager(this)
         setContentView(binding.root)
@@ -68,55 +182,217 @@ class MainActivity : AppCompatActivity() {
         observeWebSocketStatus()
         observeNotificationSent()
         observeNotificationCaptured()
+        observeIncomingCommands()
 
-        // Auto-connect if the user has previously saved settings and
-        // notification access is already granted.
+        requestPhonePermissionsIfNeeded()
         autoConnectIfSaved()
     }
 
-    /**
-     * Re-check Notification Access on every resume.
-     * Handles the case where the user came back from the Settings screen.
-     */
     override fun onResume() {
         super.onResume()
-        Log.d(TAG, "MainActivity.onResume()")
         refreshPermissionBanner()
+
+        // Register battery receiver — sticky intent fires immediately with current level
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+
+        // Register phone state listener if we have the required permission
+        if (hasPermission(Manifest.permission.READ_PHONE_STATE)) {
+            registerPhoneStateListener()
+        }
+
+        // Register clipboard listener (phone → extension sync)
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.addPrimaryClipChangedListener(clipboardListener)
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        try { unregisterReceiver(batteryReceiver) } catch (_: Exception) {}
+        unregisterPhoneStateListener()
+
+        // Unregister clipboard listener
+        try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.removePrimaryClipChangedListener(clipboardListener)
+        } catch (_: Exception) {}
+    }
+
+    // ── Phone permission helpers ───────────────────────────────────────────────
+
+    private fun hasPermission(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun requestPhonePermissionsIfNeeded() {
+        val needed = mutableListOf<String>()
+        if (!hasPermission(Manifest.permission.READ_PHONE_STATE)) needed += Manifest.permission.READ_PHONE_STATE
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)) needed += Manifest.permission.ANSWER_PHONE_CALLS
+        }
+        if (!hasPermission(Manifest.permission.CALL_PHONE)) needed += Manifest.permission.CALL_PHONE
+
+        if (needed.isNotEmpty()) {
+            Log.i(TAG, "Requesting phone permissions: $needed")
+            ActivityCompat.requestPermissions(this, needed.toTypedArray(), REQ_PHONE_PERMISSIONS)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_PHONE_PERMISSIONS) {
+            val phoneGranted = grantResults.zip(permissions.toList())
+                .find { (_, p) -> p == Manifest.permission.READ_PHONE_STATE }
+                ?.first == PackageManager.PERMISSION_GRANTED
+
+            if (phoneGranted) {
+                Log.i(TAG, "READ_PHONE_STATE granted — registering phone state listener")
+                registerPhoneStateListener()
+            } else {
+                Log.w(TAG, "READ_PHONE_STATE denied — call state detection disabled")
+            }
+        }
+    }
+
+    // ── Phone state listener registration ─────────────────────────────────────
+
+    @Suppress("DEPRECATION")
+    private fun registerPhoneStateListener() {
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            tm.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE)
+            Log.d(TAG, "Phone state listener registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register phone state listener: ${e.message}")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun unregisterPhoneStateListener() {
+        try {
+            val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+            tm.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
+        } catch (_: Exception) {}
+    }
+
+    // ── Call control ───────────────────────────────────────────────────────────
+
+    /**
+     * Answer the currently ringing call.
+     *
+     * Uses TelecomManager.acceptRingingCall() which requires ANSWER_PHONE_CALLS
+     * (API 26+). This method is deprecated in API 29 but still functional up to
+     * at least API 33. A full InCallService implementation would be the correct
+     * long-term solution for API 29+ devices.
+     */
+    @Suppress("DEPRECATION")
+    private fun answerCall() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            Log.w(TAG, "answerCall(): requires API 26+")
+            return
+        }
+        if (!hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)) {
+            Log.w(TAG, "answerCall(): ANSWER_PHONE_CALLS not granted")
+            Toast.makeText(this, "Answer Calls permission not granted", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            telecom.acceptRingingCall()
+            Log.i(TAG, "📞 Call answered via TelecomManager")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to answer call: ${e.message}")
+        }
+    }
+
+    /**
+     * Reject/end the currently active or ringing call.
+     *
+     * Uses TelecomManager.endCall() which is deprecated in API 28.
+     * On API 29+ this may silently fail — the proper solution is InCallService.
+     * CALL_PHONE permission is required.
+     */
+    @Suppress("DEPRECATION")
+    private fun rejectCall() {
+        if (!hasPermission(Manifest.permission.CALL_PHONE)) {
+            Log.w(TAG, "rejectCall(): CALL_PHONE not granted")
+            Toast.makeText(this, "Call Phone permission not granted", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val telecom = getSystemService(Context.TELECOM_SERVICE) as TelecomManager
+            val ended   = telecom.endCall()
+            Log.i(TAG, "📞 endCall() returned: $ended")
+            if (!ended) {
+                Log.w(TAG, "rejectCall(): endCall() returned false — may require InCallService on API 29+")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to reject call: ${e.message}")
+        }
+    }
+
+    // ── Clipboard (phone receives text from extension) ─────────────────────────
+
+    private fun setPhoneClipboard(text: String) {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Phone Notify", text))
+            Log.i(TAG, "📋 Clipboard set: ${text.take(40)}")
+            Toast.makeText(this, "📋 Clipboard updated from browser", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set clipboard: ${e.message}")
+        }
+    }
+
+    // ── Incoming command observer ──────────────────────────────────────────────
+
+    /**
+     * Wire up WebSocketManager callbacks for commands the extension sends TO the phone.
+     * All callbacks arrive on the main thread (posted by WebSocketManager).
+     */
+    private fun observeIncomingCommands() {
+        WebSocketManager.onCallAction = { action ->
+            Log.i(TAG, "call_action received: $action")
+            when (action) {
+                "answer"  -> answerCall()
+                "reject"  -> rejectCall()
+                "silence" -> {
+                    // Silence is a best-effort audio duck — Android doesn't expose a
+                    // public API to silence the ringer without MODIFY_AUDIO_SETTINGS.
+                    // For now, reject silently achieves "silence + end call".
+                    rejectCall()
+                }
+            }
+        }
+
+        WebSocketManager.onMediaControl = { action ->
+            Log.i(TAG, "media_control received: $action")
+            sendMediaKeyEvent(action)
+        }
+
+        WebSocketManager.onClipboardReceived = { text ->
+            Log.i(TAG, "clipboard_to_phone: ${text.take(40)}")
+            setPhoneClipboard(text)
+        }
     }
 
     // ── Settings restore ────────────────────────────────────────────────────────
 
-    /**
-     * Populate IP and port inputs with the last-saved values so the user
-     * doesn't have to re-type their laptop's IP on every launch.
-     */
     private fun restoreSavedSettings() {
-        val savedIp   = settings.ipAddress
-        val savedPort = settings.port
+        val savedIp    = settings.ipAddress
+        val savedPort  = settings.port
+        val savedToken = settings.token
 
-        Log.d(TAG, "restoreSavedSettings: ip='$savedIp' port='$savedPort'")
-
-        // If no IP is saved yet, pre-fill with 127.0.0.1 (works via adb reverse tcp:8080 tcp:8080)
-        if (savedIp.isNotEmpty()) {
-            binding.etIpAddress.setText(savedIp)
-        } else {
-            binding.etIpAddress.setText("127.0.0.1")
-        }
+        binding.etIpAddress.setText(if (savedIp.isNotEmpty()) savedIp else "127.0.0.1")
         binding.etPort.setText(savedPort)
+        binding.etToken.setText(savedToken)
 
-        // Immediately update the URL preview with the restored values
         updateUrlPreview()
     }
 
     // ── URL preview ──────────────────────────────────────────────────────────────
 
-    /**
-     * Wire up TextWatchers on both input fields so the URL preview below the
-     * port field updates in real time as the user types.
-     *
-     * The preview shows exactly what URL will be used to connect, including
-     * the ?type=phone query parameter required by the relay server.
-     */
     private fun setupUrlPreview() {
         val watcher = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -125,16 +401,18 @@ class MainActivity : AppCompatActivity() {
         }
         binding.etIpAddress.addTextChangedListener(watcher)
         binding.etPort.addTextChangedListener(watcher)
+        // Token doesn't change the visible URL preview — it's appended internally
     }
 
     private fun updateUrlPreview() {
-        val ip   = binding.etIpAddress.text.toString().trim()
-        val port = binding.etPort.text.toString().trim().ifEmpty { SettingsManager.DEFAULT_PORT }
+        val ip    = binding.etIpAddress.text.toString().trim()
+        val port  = binding.etPort.text.toString().trim().ifEmpty { SettingsManager.DEFAULT_PORT }
+        val token = binding.etToken.text.toString().trim()
 
         binding.tvUrlPreview.text = if (ip.isEmpty()) {
             "ws://127.0.0.1:8080?type=phone"
         } else {
-            WebSocketManager.buildUrl(ip, port)
+            WebSocketManager.buildUrl(ip, port, token)
         }
     }
 
@@ -142,25 +420,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
 
-        // ── Connect / Disconnect / Retry button ─────────────────────────────────
         binding.btnConnect.setOnClickListener {
             if (WebSocketManager.isConnected()) {
-                // Currently connected → user wants to disconnect
                 Log.i(TAG, "User tapped Disconnect")
                 WebSocketManager.disconnect()
             } else {
-                // Disconnected / errored → validate and connect
-                val ip   = binding.etIpAddress.text.toString().trim()
-                val port = binding.etPort.text.toString().trim().ifEmpty { SettingsManager.DEFAULT_PORT }
+                val ip    = binding.etIpAddress.text.toString().trim()
+                val port  = binding.etPort.text.toString().trim().ifEmpty { SettingsManager.DEFAULT_PORT }
+                val token = binding.etToken.text.toString().trim()
 
-                // Validate IP
                 if (ip.isEmpty()) {
                     binding.etIpAddress.error = "Enter your laptop's IP address"
                     binding.etIpAddress.requestFocus()
                     return@setOnClickListener
                 }
 
-                // Validate port
                 val portNum = port.toIntOrNull()
                 if (portNum == null || portNum !in 1..65535) {
                     binding.etPort.error = "Invalid port (1–65535)"
@@ -168,78 +442,42 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                Log.i(TAG, "User tapped Connect → $ip:$port")
-
-                // Persist settings before connecting
-                settings.saveConnection(ip, port)
-
-                // Initiate connection (WebSocketManager appends ?type=phone)
-                WebSocketManager.connect(ip, port)
+                Log.i(TAG, "User tapped Connect → $ip:$port token=${token.isNotEmpty()}")
+                settings.saveConnection(ip, port, token)
+                WebSocketManager.connect(ip, port, token)
             }
         }
 
-        // ── Grant Permission button (inside the amber banner) ───────────────────
         binding.btnGrantPermission.setOnClickListener {
-            openNotificationAccessSettings()
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
     }
 
-    /**
-     * Auto-connect on launch if:
-     *   1. The user has previously saved an IP address.
-     *   2. Notification Access is already granted.
-     *   3. We are not already connected (guards against activity recreation).
-     *
-     * Uses 127.0.0.1 (tunnelled via `adb reverse tcp:8080 tcp:8080`) if the
-     * saved IP is blank — meaning first-run with adb reverse active just works.
-     */
     private fun autoConnectIfSaved() {
-        if (WebSocketManager.isConnected()) {
-            Log.d(TAG, "autoConnectIfSaved: already connected — skipping")
-            return
-        }
+        if (WebSocketManager.isConnected()) return
 
-        val ip   = settings.ipAddress.ifEmpty { "127.0.0.1" }
-        val port = settings.port
-
-        Log.d(TAG, "autoConnectIfSaved: ip='$ip' port='$port' notificationAccess=${isNotificationServiceEnabled()}")
+        val ip    = settings.ipAddress.ifEmpty { "127.0.0.1" }
+        val port  = settings.port
+        val token = settings.token
 
         if (isNotificationServiceEnabled()) {
             Log.i(TAG, "Auto-connecting to $ip:$port…")
-            settings.saveConnection(ip, port)
+            settings.saveConnection(ip, port, token)
             binding.etIpAddress.setText(ip)
-            WebSocketManager.connect(ip, port)
-        } else {
-            Log.w(TAG, "Auto-connect skipped: Notification Access not granted yet")
+            WebSocketManager.connect(ip, port, token)
         }
     }
 
-    // ── WebSocket status observer ────────────────────────────────────────────────
+    // ── WebSocket status ─────────────────────────────────────────────────────────
 
-    /**
-     * Register for status changes from WebSocketManager.
-     * Delivered on the main thread — UI updates are safe directly.
-     */
     private fun observeWebSocketStatus() {
-        WebSocketManager.onStatusChanged = { status ->
-            applyConnectionStatus(status)
-        }
+        WebSocketManager.onStatusChanged = { status -> applyConnectionStatus(status) }
     }
 
-    /**
-     * Apply the new [ConnectionStatus] to all status-related UI elements:
-     *   - Status dot color
-     *   - Status label text + color
-     *   - Button text + color + enabled state
-     *   - Input fields enabled/disabled
-     *   - Queue size badge
-     */
     private fun applyConnectionStatus(status: ConnectionStatus) {
-        // Always update the status label first
         binding.tvStatus.text = status.displayText()
 
         when (status) {
-
             is ConnectionStatus.Connected -> {
                 binding.tvStatus.setTextColor(color(R.color.status_connected))
                 binding.viewStatusDot.setBackgroundResource(R.drawable.dot_connected)
@@ -248,17 +486,16 @@ class MainActivity : AppCompatActivity() {
                 binding.btnConnect.isEnabled  = true
                 binding.etIpAddress.isEnabled = false
                 binding.etPort.isEnabled      = false
+                binding.etToken.isEnabled     = false
                 binding.tvQueueSize.visibility = View.GONE
             }
-
             is ConnectionStatus.Connecting -> {
                 binding.tvStatus.setTextColor(color(R.color.status_connecting))
                 binding.viewStatusDot.setBackgroundResource(R.drawable.dot_connecting)
                 binding.btnConnect.text      = getString(R.string.btn_connecting)
-                binding.btnConnect.isEnabled = false   // prevent double-tap during handshake
+                binding.btnConnect.isEnabled = false
                 binding.tvQueueSize.visibility = View.GONE
             }
-
             is ConnectionStatus.Disconnected -> {
                 binding.tvStatus.setTextColor(color(R.color.status_disconnected))
                 binding.viewStatusDot.setBackgroundResource(R.drawable.dot_disconnected)
@@ -267,9 +504,9 @@ class MainActivity : AppCompatActivity() {
                 binding.btnConnect.isEnabled  = isNotificationServiceEnabled()
                 binding.etIpAddress.isEnabled = true
                 binding.etPort.isEnabled      = true
+                binding.etToken.isEnabled     = true
                 showQueueSizeIfNeeded()
             }
-
             is ConnectionStatus.Error -> {
                 binding.tvStatus.setTextColor(color(R.color.status_error))
                 binding.viewStatusDot.setBackgroundResource(R.drawable.dot_error)
@@ -279,12 +516,12 @@ class MainActivity : AppCompatActivity() {
                 binding.btnConnect.isEnabled  = true
                 binding.etIpAddress.isEnabled = true
                 binding.etPort.isEnabled      = true
+                binding.etToken.isEnabled     = true
                 showQueueSizeIfNeeded()
             }
         }
     }
 
-    /** Shows the queue size badge when there are pending offline messages. */
     private fun showQueueSizeIfNeeded() {
         val q = WebSocketManager.queueSize()
         if (q > 0) {
@@ -297,83 +534,79 @@ class MainActivity : AppCompatActivity() {
 
     // ── Notification counters ────────────────────────────────────────────────────
 
-    /**
-     * Observe WebSocketManager.onNotificationSent — fires when a notification
-     * is actually delivered to the relay server (immediately or from queue flush).
-     * Updates the "Sent" counter with a bump animation.
-     */
     private fun observeNotificationSent() {
         WebSocketManager.onNotificationSent = { totalSent ->
             binding.tvNotifSentCount.text = totalSent.toString()
-            binding.tvNotifSentCount.startAnimation(
-                AnimationUtils.loadAnimation(this, R.anim.count_bump)
-            )
-            // After a flush the queue size badge should disappear
+            binding.tvNotifSentCount.startAnimation(AnimationUtils.loadAnimation(this, R.anim.count_bump))
             showQueueSizeIfNeeded()
         }
     }
 
-    /**
-     * Observe NotificationService.onCountChanged — fires whenever a notification
-     * passes filters and is captured (may be queued, not yet sent).
-     * Updates the "Captured" counter with a bump animation.
-     */
     private fun observeNotificationCaptured() {
         NotificationService.onCountChanged = { captured ->
             binding.tvNotifCount.text = captured.toString()
-            binding.tvNotifCount.startAnimation(
-                AnimationUtils.loadAnimation(this, R.anim.count_bump)
-            )
+            binding.tvNotifCount.startAnimation(AnimationUtils.loadAnimation(this, R.anim.count_bump))
         }
     }
 
-    // ── Notification Access permission ───────────────────────────────────────────
+    // ── Permission banner ────────────────────────────────────────────────────────
 
-    /**
-     * Show or hide the amber permission banner.
-     * Called on every onResume() so the UI immediately reflects a newly-granted
-     * permission without requiring an app restart.
-     */
     private fun refreshPermissionBanner() {
         val hasPermission = isNotificationServiceEnabled()
-
-        // Hide banner when permission is granted
         binding.cardPermission.visibility = if (hasPermission) View.GONE else View.VISIBLE
-
-        // Dim the main card to signal it's unusable without permission
         binding.cardMain.alpha = if (hasPermission) 1.0f else 0.45f
-
-        // Disable Connect if permission is missing (and not already connected)
         if (!WebSocketManager.isConnected()) {
             binding.btnConnect.isEnabled = hasPermission
         }
     }
 
-    /**
-     * Checks whether PhoneNotify's NotificationListenerService is active.
-     * Uses the "enabled_notification_listeners" Secure Settings value —
-     * there is no runtime permission constant for notification access.
-     */
     private fun isNotificationServiceEnabled(): Boolean {
-        val flat = Settings.Secure.getString(
-            contentResolver,
-            "enabled_notification_listeners"
-        ) ?: return false
-
+        val flat   = Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: return false
         val target = ComponentName(this, NotificationService::class.java)
-
         return flat.split(":").any { entry ->
             ComponentName.unflattenFromString(entry) == target
         }
     }
 
-    /** Opens the system Notification Listener Settings page. */
-    private fun openNotificationAccessSettings() {
-        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    // ── Media key dispatch ───────────────────────────────────────────────────────
+
+    /**
+     * Sends a hardware media key event to the active MediaSession via AudioManager.
+     * This is the same mechanism used by Bluetooth headphones / headset buttons —
+     * it works with any app that registers a MediaSession (Spotify, YouTube Music, etc.)
+     *
+     * @param action "play_pause" | "play" | "pause" | "next" | "prev"
+     */
+    private fun sendMediaKeyEvent(action: String) {
+        val keyCode = when (action.lowercase()) {
+            "play_pause", "play", "pause", "toggle" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            "next"                                   -> KeyEvent.KEYCODE_MEDIA_NEXT
+            "prev", "previous"                       -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            "stop"                                   -> KeyEvent.KEYCODE_MEDIA_STOP
+            else -> {
+                Log.w(TAG, "Unknown media action: $action")
+                return
+            }
+        }
+
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val now = SystemClock.uptimeMillis()
+
+            // Send KEY_DOWN then KEY_UP — same as a physical button press
+            am.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0))
+            // Slight delay so the media player registers the press before the release
+            Handler(Looper.getMainLooper()).postDelayed({
+                am.dispatchMediaKeyEvent(KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0))
+            }, 100)
+
+            Log.i(TAG, "Media key dispatched: $action → keyCode=$keyCode")
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMediaKeyEvent failed: ${e.message}", e)
+        }
     }
 
     // ── Utilities ────────────────────────────────────────────────────────────────
 
-    /** Concise [ContextCompat.getColor] alias. */
     private fun color(resId: Int): Int = ContextCompat.getColor(this, resId)
 }

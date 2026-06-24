@@ -1,6 +1,7 @@
 # Node.js
 server/node_modules/
 server/.env
+server/history.json
 
 # Android Build & IDE files
 .gradle/
@@ -10,3 +11,4 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+

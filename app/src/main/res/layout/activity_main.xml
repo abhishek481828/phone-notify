@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    activity_main.xml — Phone Notify Main Screen (v2)
-    ─────────────────────────────────────────────────────
-    New in v2:
-      • tvUrlPreview    — live WebSocket URL preview below the port field
-      • tvQueueSize     — offline queue badge (hidden when empty)
-      • tvNotifSentCount — notifications delivered to server (vs. captured)
-      • tvNotifCount     — total captured (may include queued)
+    activity_main.xml — Phone Notify Main Screen v3
+    ────────────────────────────────────────────────
+    New in v3:
+      • etToken       — Access Token input field
+      • version badge updated to v3.0
+      • tvUrlPreview now shows token in the URL when entered
 
-    View ID reference for View Binding (ActivityMainBinding):
+    View ID reference for ActivityMainBinding:
       cardPermission      — amber permission banner
       btnGrantPermission  — opens Notification Access settings
       cardMain            — main content card (dimmed when no permission)
       etIpAddress         — laptop IP address input
       etPort              — server port input
+      etToken             — access token input (optional)     ← NEW v3
       tvUrlPreview        — live ws:// URL preview
       btnConnect          — Connect / Connecting… / Disconnect / Retry
       viewStatusDot       — colored dot (background drawable changes per state)
@@ -69,7 +69,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="v2.0"
+                android:text="v3.0"
                 android:textColor="@color/text_muted"
                 android:textSize="11sp"
                 android:fontFamily="sans-serif"/>
@@ -205,7 +205,7 @@
                 <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
+                    android:layout_marginBottom="14dp"
                     app:boxBackgroundColor="@color/bg_input"
                     app:boxBackgroundMode="filled"
                     app:boxCornerRadiusTopStart="10dp"
@@ -226,6 +226,47 @@
                         android:textSize="16sp"
                         android:fontFamily="monospace"
                         android:paddingStart="14dp"
+                        android:imeOptions="actionNext"
+                        android:singleLine="true"/>
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- ── Access Token (NEW v3) ──────────────────────────── -->
+
+                <!-- Token label -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Access Token (optional)"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="6dp"/>
+
+                <!-- Token input -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    app:boxBackgroundColor="@color/bg_input"
+                    app:boxBackgroundMode="filled"
+                    app:boxCornerRadiusTopStart="10dp"
+                    app:boxCornerRadiusTopEnd="10dp"
+                    app:boxCornerRadiusBottomStart="10dp"
+                    app:boxCornerRadiusBottomEnd="10dp"
+                    app:hintEnabled="false"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.Dense">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etToken"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:hint="Leave empty if no server auth"
+                        android:inputType="textPassword"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_muted"
+                        android:textSize="14sp"
+                        android:fontFamily="monospace"
+                        android:paddingStart="14dp"
                         android:imeOptions="actionDone"
                         android:singleLine="true"/>
 
@@ -233,8 +274,8 @@
 
                 <!--
                     URL preview — updates live as the user types via TextWatcher.
-                    Shows the exact URL that will be sent to WebSocketManager,
-                    including the ?type=phone query parameter.
+                    Shows the exact URL sent to WebSocketManager including the
+                    ?type=phone parameter and &token=… when a token is set.
                 -->
                 <TextView
                     android:id="@+id/tvUrlPreview"
@@ -246,7 +287,7 @@
                     android:fontFamily="monospace"
                     android:paddingStart="4dp"
                     android:layout_marginBottom="20dp"
-                    tools:text="ws://192.168.1.50:8080/?type=phone"/>
+                    tools:text="ws://192.168.1.50:8080?type=phone"/>
 
                 <!-- Connect / Disconnect button -->
                 <Button
@@ -374,8 +415,7 @@
                         android:orientation="vertical"
                         android:gravity="center_horizontal"
                         android:background="@color/bg_input"
-                        android:padding="14dp"
-                        android:layout_marginStart="0dp">
+                        android:padding="14dp">
 
                         <TextView
                             android:id="@+id/tvNotifSentCount"
@@ -409,7 +449,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Phone Notify · v2.0 · ws://?type=phone"
+            android:text="Phone Notify · v3.0 · ws://?type=phone"
             android:textColor="@color/text_muted"
             android:textSize="10.5sp"
             android:gravity="center"

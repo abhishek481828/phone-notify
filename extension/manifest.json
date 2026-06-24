@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Phone Notify",
-  "version": "1.0.0",
-  "description": "A beautiful notification dashboard that mirrors your Android notifications in Chrome.",
+  "version": "3.0.0",
+  "description": "Mirror Android notifications, battery, calls, media & clipboard in Chrome.",
 
   "icons": {
     "16": "icons/icon16.png",
@@ -18,14 +18,25 @@
     "default_path": "sidepanel.html"
   },
 
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+
   "permissions": [
     "sidePanel",
     "storage",
     "notifications",
-    "alarms"
+    "alarms",
+    "clipboardRead",
+    "clipboardWrite"
   ],
 
   "action": {
-    "default_title": "Open Phone Notify"
+    "default_title": "Open Phone Notify",
+    "default_badge_text": ""
   }
 }

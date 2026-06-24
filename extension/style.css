@@ -210,7 +210,7 @@ body {
   box-shadow: 0 0 10px var(--accent-glow);
 }
 
-/* ─── 9. Icon Button ────────────────────────────────────────────────────────── */
+/* ─── 9. Icon Button ────────────────────────────────────────────────────── */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -235,6 +235,24 @@ body {
 
 .icon-btn:active {
   transform: translateY(0);
+}
+
+/* Confirm-pending state — shown before destructive action (clear all) */
+.icon-btn.confirm-pending {
+  color: var(--red);
+  border-color: rgba(244, 63, 94, 0.35);
+  background: rgba(244, 63, 94, 0.08);
+  animation: confirm-pulse 1s ease-in-out infinite;
+}
+
+@keyframes confirm-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(244, 63, 94, 0); }
+}
+
+/* Fix: search icon color responds to focus via JS class on wrapper */
+.search-wrapper.focused .search-icon {
+  color: var(--accent);
 }
 
 /* ─── 10. Search ────────────────────────────────────────────────────────────── */
@@ -341,7 +359,6 @@ body {
   padding: 4px 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 /* ─── 13. Notification Card ─────────────────────────────────────────────────── */
@@ -361,6 +378,11 @@ body {
   animation-delay: calc(var(--card-index, 0) * 30ms);
   transition: all var(--t-normal) var(--ease);
   border-left: 3.5px solid var(--accent, rgba(255, 255, 255, 0.1)) !important;
+  margin-bottom: 8px;
+}
+
+.notif-card:last-child {
+  margin-bottom: 0;
 }
 
 .notif-card:hover {
@@ -443,9 +465,38 @@ body {
   font-size: 12px;
   color: var(--text-2);
   line-height: 1.5;
-  white-space: pre-wrap;
   word-break: break-word;
   margin-top: 1px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: none;
+  white-space: normal;
+}
+
+.card-message.expanded {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* "Show more / Show less" toggle button */
+.show-more-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 0 0;
+  outline: none;
+  transition: color var(--t-fast) var(--ease);
+  display: block;
+}
+
+.show-more-btn:hover {
+  color: var(--text-1);
 }
 
 /* Unread indicator dot */
@@ -505,7 +556,7 @@ body {
   transform: scale(0.9) rotate(90deg);
 }
 
-/* ─── 18. Card entry & dismiss animations ────────────────────────────────────── */
+/* ─── 18. Card entry & dismiss animations ────────────────────────────────── */
 @keyframes card-in {
   from {
     opacity: 0;
@@ -519,21 +570,70 @@ body {
   }
 }
 
+/*
+ * card-out: two-phase dismiss.
+ *   0–45%  → card slides right + fades  (visually gone)
+ *   45–100% → height + margin collapses  (space closes smoothly)
+ * Requires .notif-card to have margin-bottom:8px (gap replaced below).
+ */
 @keyframes card-out {
-  to {
+  0%   {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 400px;
+    margin-bottom: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-left-width: 3.5px;
+  }
+  45%  {
     opacity: 0;
-    transform: translateX(30px) scale(0.95);
+    transform: translateX(36px) scale(0.97);
+    max-height: 400px;
+    margin-bottom: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-left-width: 3.5px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(36px) scale(0.97);
     max-height: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-left-width: 0;
   }
 }
 
 .notif-card.dismissing {
-  animation: card-out 250ms var(--ease) forwards;
+  animation: card-out 380ms var(--ease) forwards;
   overflow: hidden;
   pointer-events: none;
+}
+
+/* New live notification — subtle accent glow on arrival */
+@keyframes new-card-arrive {
+  0%   {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+    box-shadow: 0 0 0 0 var(--accent-glow);
+    filter: blur(3px);
+  }
+  60%  {
+    opacity: 1;
+    transform: translateY(0) scale(1.005);
+    box-shadow: 0 0 18px 4px var(--accent-glow);
+    filter: blur(0);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+.notif-card.new-card {
+  animation: new-card-arrive 550ms var(--ease) both;
 }
 
 /* ─── 19. Empty State ───────────────────────────────────────────────────────── */
@@ -935,3 +1035,868 @@ body {
 .highlight-flash {
   animation: highlight-pulse 0.8s ease-in-out;
 }
+
+/* ─── 25. Toast Notifications ──────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 52px; /* sit above footer */
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 300;
+  pointer-events: none;
+}
+
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(18, 18, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255,255,255,0.04) inset;
+  animation: toast-in 300ms var(--ease) both;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.toast.exit {
+  animation: toast-out 250ms var(--ease) forwards;
+}
+
+.toast-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toast-dot.success { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.toast-dot.error   { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+.toast-dot.warn    { background: #f59e0b;        box-shadow: 0 0 6px #f59e0b; }
+.toast-dot.info    { background: var(--accent);  box-shadow: 0 0 6px var(--accent); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.93); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(6px) scale(0.93); }
+}
+
+/* ─── 26. Right-click Context Menu ─────────────────────────────────────────── */
+.context-menu {
+  position: fixed;
+  z-index: 400;
+  background: rgba(14, 14, 18, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--r-md);
+  padding: 4px;
+  min-width: 150px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255,255,255,0.04) inset;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: toast-in 180ms var(--ease) both;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  text-align: left;
+  outline: none;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.ctx-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+}
+
+.ctx-item:last-child:hover {
+  /* mute app — subtle red hover */
+}
+
+.ctx-item.ctx-danger:hover {
+  background: rgba(244, 63, 94, 0.1);
+  color: var(--red);
+}
+
+/* ─── 27. Filter pill count badge ───────────────────────────────────────────── */
+.pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-left: 4px;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.filter-pill.active .pill-count {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-1);
+}
+
+/* ─── 28. Incoming Call Overlay ─────────────────────────────────────────────── */
+
+/*
+ * The call overlay is a full-width card that slides down from the top of the
+ * notification area when a call is ringing. It stacks above the notification
+ * list without covering the header or footer, and disappears when the call
+ * ends / is answered / rejected.
+ *
+ * Structure:
+ *   .call-overlay
+ *     .call-rings            — pulsing concentric rings + phone avatar
+ *       .call-ring × 3      — each ring scales out with staggered delay
+ *       .call-avatar        — green phone icon at center
+ *     .call-info            — label / caller name / device name / timer
+ *     .call-actions         — Silence · Reject · Answer buttons
+ */
+
+.call-overlay {
+  position: relative;
+  z-index: 50;
+  margin: 0 12px 8px;
+  padding: 20px 16px 18px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.12) 0%,
+    rgba(16, 185, 129, 0.04) 50%,
+    rgba(0, 0, 0, 0.0) 100%
+  );
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(16, 185, 129, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 60px rgba(16, 185, 129, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: call-overlay-in 380ms var(--ease) both;
+}
+
+.call-overlay.exiting {
+  animation: call-overlay-out 280ms var(--ease) both;
+}
+
+@keyframes call-overlay-in {
+  from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+
+@keyframes call-overlay-out {
+  from { opacity: 1; transform: translateY(0)      scale(1);    max-height: 300px; }
+  to   { opacity: 0; transform: translateY(-10px)  scale(0.97); max-height: 0; }
+}
+
+/* ── Pulsing rings ── */
+
+.call-rings {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(16, 185, 129, 0.5);
+  animation: call-pulse 2.4s ease-out infinite;
+}
+
+.call-ring-1 { animation-delay: 0ms;    }
+.call-ring-2 { animation-delay: 800ms;  }
+.call-ring-3 { animation-delay: 1600ms; }
+
+@keyframes call-pulse {
+  0%   { transform: scale(1);    opacity: 0.8; border-width: 2px; }
+  70%  { transform: scale(1.9);  opacity: 0;   border-width: 1px; }
+  100% { transform: scale(1.9);  opacity: 0;   border-width: 1px; }
+}
+
+/* ── Avatar circle ── */
+
+.call-avatar {
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(16,185,129,0.28), rgba(16,185,129,0.12));
+  border: 1.5px solid rgba(16, 185, 129, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #10b981;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+  animation: avatar-throb 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes avatar-throb {
+  from { box-shadow: 0 0 12px rgba(16, 185, 129, 0.2); }
+  to   { box-shadow: 0 0 28px rgba(16, 185, 129, 0.45); }
+}
+
+/* ── Caller info text ── */
+
+.call-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.call-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #10b981;
+  opacity: 0.85;
+}
+
+.call-caller {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-device {
+  font-size: 10.5px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.call-timer {
+  font-size: 13px;
+  font-weight: 600;
+  color: #10b981;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* ── Action buttons row ── */
+
+.call-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  justify-content: center;
+}
+
+.call-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--r-md);
+  transition: all var(--t-fast) var(--ease);
+  padding: 10px 14px;
+  min-width: 64px;
+}
+
+/* Answer — green */
+.call-btn-answer {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+}
+.call-btn-answer:hover {
+  background: linear-gradient(135deg, #10b981, #34d399);
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.55);
+  transform: translateY(-1px) scale(1.04);
+}
+.call-btn-answer:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Reject — red */
+.call-btn-reject {
+  background: linear-gradient(135deg, #be123c, #f43f5e);
+  color: #ffffff;
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.3);
+}
+.call-btn-reject:hover {
+  background: linear-gradient(135deg, #f43f5e, #fb7185);
+  box-shadow: 0 6px 24px rgba(244, 63, 94, 0.5);
+  transform: translateY(-1px) scale(1.04);
+}
+.call-btn-reject:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Silence — muted gray */
+.call-btn-silence {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+.call-btn-silence:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-1);
+  transform: translateY(-1px);
+}
+.call-btn-silence:active {
+  transform: translateY(0);
+}
+
+/* ── Active call state (after answering — show timer, no rings) ── */
+
+.call-overlay.call-active .call-ring {
+  animation: none;
+  opacity: 0;
+}
+.call-overlay.call-active .call-avatar {
+  border-color: rgba(16, 185, 129, 0.7);
+  animation: avatar-throb 2s ease-in-out infinite alternate;
+}
+.call-overlay.call-active .call-label {
+  color: var(--text-2);
+}
+.call-overlay.call-active .call-label::before {
+  content: "📞 ";
+}
+.call-overlay.call-active #call-timer {
+  display: block !important;
+}
+.call-overlay.call-active .call-btn-answer,
+.call-overlay.call-active .call-btn-silence {
+  display: none;
+}
+.call-overlay.call-active .call-btn-reject span::before {
+  content: "End ";
+}
+
+/* ── "new-card" arrival glow (referenced in sidepanel.js) ── */
+
+.notif-card.new-card {
+  animation: card-arrive 500ms var(--ease) both;
+}
+
+@keyframes card-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+    box-shadow: -4px 0 0 var(--accent);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+    box-shadow: none;
+  }
+}
+
+/* ── highlight-flash for URL input in settings ── */
+.highlight-flash {
+  animation: input-flash 600ms var(--ease) both;
+}
+@keyframes input-flash {
+  0%   { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: none; }
+}
+
+/* ─── 29. Battery Widget ─────────────────────────────────────────────────────── */
+
+/*
+ * Displayed in the footer right side.
+ * Battery shell is a CSS-drawn pill with a fill div and a nub ::after cap.
+ * Colours: green > 30%, amber 15-30%, red ≤ 15% (set via JS class or inline var).
+ */
+
+/* Footer flex update — push battery widget to the right */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer #footer-text {
+  flex: 1;
+}
+
+.battery-widget {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0.75;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.battery-widget:hover { opacity: 1; }
+
+/* Bolt icon — shown when charging (JS toggles hidden attr) */
+.battery-bolt {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 3px #f59e0b88);
+}
+
+/* Battery outline shell — 24×12 px rectangle + 2px nub on right */
+.battery-shell {
+  position: relative;
+  width: 24px;
+  height: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+  /* nub cap */
+}
+.battery-nub {
+  position: absolute;
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.5px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 0 1px 1px 0;
+}
+
+/* Fill bar — width driven by JS: el.style.width = level + '%' */
+.battery-fill {
+  position: absolute;
+  inset: 2px;
+  right: auto;          /* width is set dynamically */
+  border-radius: 1.5px;
+  background: var(--green);
+  transition: width 0.8s var(--ease), background-color 0.5s ease;
+}
+
+/* State colours — set via .battery-fill.warn / .battery-fill.danger */
+.battery-fill.warn   { background: #f59e0b; }
+.battery-fill.danger { background: var(--red); }
+
+/* Percentage text */
+.battery-pct {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ─── 30. Media Control Bar ─────────────────────────────────────────────────── */
+
+/*
+ * Compact widget shown between the call overlay and notification list
+ * when the phone is actively playing media.
+ * Entrance: slides in from the left edge.
+ */
+
+.media-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  background: rgba(10, 10, 14, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: media-bar-in 320ms var(--ease) both;
+  overflow: hidden;
+}
+
+.media-bar.exiting {
+  animation: media-bar-out 220ms var(--ease) both;
+}
+
+@keyframes media-bar-in {
+  from { opacity: 0; transform: translateX(-6px); max-height: 0; padding-block: 0; margin-bottom: 0; }
+  to   { opacity: 1; transform: translateX(0);    max-height: 80px; padding-block: 9px; margin-bottom: 8px; }
+}
+
+@keyframes media-bar-out {
+  from { opacity: 1; transform: translateX(0);    max-height: 80px; }
+  to   { opacity: 0; transform: translateX(-6px); max-height: 0; padding-block: 0; margin-bottom: 0; }
+}
+
+/* App emoji / icon */
+.media-icon {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.05);
+  line-height: 1;
+}
+
+/* Track + artist text — fills available space */
+.media-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;          /* allow text-overflow to work */
+}
+
+.media-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-artist {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Controls group */
+.media-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.media-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+  outline: none;
+}
+
+.media-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  transform: scale(1.08);
+}
+
+.media-btn:active {
+  transform: scale(0.93);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Play/Pause button — slightly larger and accented */
+.media-btn-play {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.media-btn-play:hover {
+  background: rgba(99, 102, 241, 0.28);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+}
+
+/* Paused state — slightly different tint to signal track is paused */
+.media-bar.paused .media-icon {
+  opacity: 0.6;
+}
+.media-bar.paused .media-title {
+  color: var(--text-2);
+}
+.media-bar.paused .media-btn-play {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── 31. Clipboard Button ──────────────────────────────────────────────────── */
+
+/*
+ * The clipboard button lives in the header icon row.
+ * On click it reads navigator.clipboard and sends to the phone.
+ * Active flash: pulse indigo → transparent to confirm the send.
+ */
+
+#clipboard-btn {
+  transition: all var(--t-fast) var(--ease);
+}
+
+#clipboard-btn.sending {
+  color: var(--accent);
+  animation: clipboard-send 600ms var(--ease) both;
+}
+
+@keyframes clipboard-send {
+  0%   { transform: scale(1.2);   color: var(--accent); }
+  50%  { transform: scale(0.9); }
+  100% { transform: scale(1);     color: inherit; }
+}
+
+#clipboard-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ─── 32. DND Toggle & Settings ─────────────────────────────────────────────── */
+
+.settings-group-dnd {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+
+.dnd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.dnd-label-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dnd-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.dnd-hint {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* Toggle switch component */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  transition: left var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  left: calc(100% - 17px);
+  background: #ffffff;
+}
+
+.toggle-switch:focus-within .toggle-track {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+/* DND time range row */
+.dnd-times {
+  padding-top: 4px;
+}
+
+.dnd-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dnd-time-row label {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.time-input {
+  width: 90px !important;
+  padding: 5px 8px !important;
+  font-size: 12px !important;
+  height: auto !important;
+  color-scheme: dark;
+}
+
+/* ─── 33. Clipboard-from-Phone Toast ─────────────────────────────────────────── */
+
+/*
+ * A wider, taller toast variant that appears when the phone pushes its
+ * clipboard to the extension. Contains a preview of the text and a
+ * "Copy" button so the user can paste it immediately.
+ */
+
+.toast-clipboard {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  max-width: 100%;
+  min-height: 52px;
+}
+
+.toast-clipboard-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.toast-clipboard-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+
+.toast-clipboard-text {
+  font-size: 11.5px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: monospace;
+}
+
+.toast-copy-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: var(--r-sm);
+  background: rgba(99, 102, 241, 0.14);
+  color: #a5b4fc;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease);
+}
+
+.toast-copy-btn:hover {
+  background: rgba(99, 102, 241, 0.28);
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #c7d2fe;
+}
+
+.clear-all-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: var(--font);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  outline: none;
+  transition: all var(--t-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.clear-all-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.clear-all-btn:active {
+  transform: translateY(0);
+}
+
+
